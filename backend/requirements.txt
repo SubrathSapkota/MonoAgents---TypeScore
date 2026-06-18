@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic
+requests
+beautifulsoup4
+sqlalchemy[asyncio]
+asyncpg
+aiosqlite
+aiomysql
+python-jose[cryptography]
+python-multipart
+bcrypt
