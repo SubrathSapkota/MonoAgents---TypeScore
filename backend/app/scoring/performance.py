@@ -58,16 +58,21 @@ def compute(lighthouse: dict | None) -> tuple[float, list[str]]:
     violations: list[str] = []
 
     # ── Pass-through font_warnings from the analyzer ─────────────────────────
-    # Two warning types are handled explicitly below with their own deductions,
-    # so skip them here to avoid duplicate entries in the UI:
-    #   • @font-face font-display warnings → handled in the font-display block
-    #   • font file size warnings          → handled in the font file size block
+    # Three warning types are handled explicitly below — skip them here to
+    # avoid duplicate entries:
+    #   • @font-face font-display  → handled in the font-display block
+    #   • font file size           → handled in the font file size block
+    #   • Google Fonts no-swap     → handled in the base score breakdown block
+    # Everything else is purely informational (no deduction) and is labelled
+    # "Recommendation" so users can distinguish it from scored violations.
     for w in lighthouse.get("font_warnings", []):
         if "font-display" in w.lower() and "@font-face" in w.lower():
             continue
         if "font file exceeds" in w.lower():
             continue
-        violations.append(f"Font loading: {w}")
+        if "display=swap" in w.lower():
+            continue
+        violations.append(f"Recommendation: {w}")
 
     # ── Base score deductions — explain silently applied penalties ───────────────
     # estimate_performance_score() in the analyzer deducts points for slow
@@ -105,8 +110,15 @@ def compute(lighthouse: dict | None) -> tuple[float, list[str]]:
             "the browser can begin laying out text and requesting fonts."
         )
 
-    # Google Fonts without display=swap is already surfaced via font_warnings
-    # pass-through, so it is intentionally omitted here to avoid duplication.
+    gfonts_penalty = bsd.get("google_fonts_penalty", 0)
+    if gfonts_penalty:
+        violations.append(
+            f"Google Fonts loaded without display=swap (−{gfonts_penalty} pts). "
+            "Without display=swap the browser hides text until the Google Font "
+            "finishes loading. Fix: append `&display=swap` to the Google Fonts URL. "
+            "Monotype Connect replaces Google Fonts with a self-hosted or CDN-hosted "
+            "feed that has display:swap pre-configured."
+        )
 
     # ── @font-face missing font-display  (−10) ────────────────────────────────
     # Condition: page has @font-face declarations AND at least one is missing
