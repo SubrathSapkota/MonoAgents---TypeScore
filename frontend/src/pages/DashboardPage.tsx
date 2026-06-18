@@ -134,22 +134,6 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* ── Quick links ─────────────────────────────────────── */}
-      <div className="dashboard-quick-links">
-        <Link to="/analyze" className="quick-link">
-          <span className="quick-link-icon">⟳</span>
-          <span>Analyze URL</span>
-        </Link>
-        <Link to="/library" className="quick-link">
-          <span className="quick-link-icon">Aa</span>
-          <span>Font Library</span>
-        </Link>
-        <Link to="/history" className="quick-link">
-          <span className="quick-link-icon">⊡</span>
-          <span>Scan History</span>
-        </Link>
-      </div>
-
       {/* ── Stat cards ──────────────────────────────────────── */}
       <div className="stat-grid">
         {STAT_CARDS.map((card) => {

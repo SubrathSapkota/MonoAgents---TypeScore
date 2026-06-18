@@ -59,9 +59,7 @@ export default function AnalyzeLoadingAnimation() {
         <div className="analyze-scan-track">
           <div className="analyze-scan-track-fill" />
         </div>
-        <p className="analyze-loading-sub">
-          Scanning pages, running Lighthouse, checking accessibility… This may take 1–2 minutes.
-        </p>
+        <p className="analyze-loading-sub">This may take 1–2 minutes.</p>
       </div>
     </div>
   );
