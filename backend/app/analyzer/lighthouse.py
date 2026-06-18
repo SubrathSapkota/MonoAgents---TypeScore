@@ -90,56 +90,66 @@ def estimate_performance_score(
     html_bytes: int,
     css_count: int,
     google_fonts: bool,
-    font_display_ok: bool,  # retained for API compat; deduction now applied in scoring/performance.py
-) -> int:
+    font_display_ok: bool,  # retained for API compat; deduction applied in scoring/performance.py
+) -> tuple[int, dict]:
     """
-    Heuristic performance score (0-100).
-    Deducts points for slow response, heavy HTML, and many CSS files.
+    Heuristic performance score (0-100) plus a breakdown of every deduction.
 
-    Note: the font-display @font-face deduction (-10) was moved to
-    scoring/performance.py so all scoring logic lives in one place.
-    The google_fonts (-5) deduction stays here because it represents a
-    request-level loading strategy rather than a font-declaration violation.
+    Returns
+    -------
+    (score: int, breakdown: dict)
+      breakdown keys: response_time_penalty, html_size_penalty,
+                      css_count_penalty, google_fonts_penalty
+      (all values are non-negative integers representing points deducted)
+
+    Note: the font-display @font-face deduction (-10) is applied in
+    scoring/performance.py so all scoring decisions live in one place.
     """
     score = 100
+    breakdown: dict[str, int] = {}
 
-    # Response time penalty.
-    # Threshold starts at 800 ms (not 500 ms) to account for geographic
-    # distance between the scanner server and the target site — a well-run
-    # site in another region can legitimately take 600–700 ms.
+    # Response time penalty (threshold 800 ms to account for geographic latency)
     if response_ms > 3000:
-        score -= 30
+        p = 30
     elif response_ms > 2000:
-        score -= 20
+        p = 20
     elif response_ms > 1000:
-        score -= 10
+        p = 10
     elif response_ms > 800:
-        score -= 5
+        p = 5
+    else:
+        p = 0
+    score -= p
+    breakdown["response_time_penalty"] = p
 
-    # HTML size penalty (over 100KB is heavy)
+    # HTML size penalty
     if html_bytes > 500_000:
-        score -= 15
+        p = 15
     elif html_bytes > 200_000:
-        score -= 10
+        p = 10
     elif html_bytes > 100_000:
-        score -= 5
+        p = 5
+    else:
+        p = 0
+    score -= p
+    breakdown["html_size_penalty"] = p
 
-    # Too many CSS files = render-blocking risk.
-    # Threshold raised from 5 to 10 — modern apps using code-splitting or
-    # component libraries commonly ship 6–10 CSS chunks by design.
+    # CSS file count penalty (threshold 10 — code-split apps commonly have 6-10)
     if css_count > 15:
-        score -= 10
+        p = 10
     elif css_count > 10:
-        score -= 5
+        p = 5
+    else:
+        p = 0
+    score -= p
+    breakdown["css_count_penalty"] = p
 
-    # Google Fonts loaded without display=swap is a request-level blocking issue
-    if google_fonts:
-        score -= 5
+    # Google Fonts loaded without display=swap (request-level blocking issue)
+    p = 5 if google_fonts else 0
+    score -= p
+    breakdown["google_fonts_penalty"] = p
 
-    # font-display @font-face deduction intentionally removed from here —
-    # it is now applied in scoring/performance.py to keep scoring logic centralised.
-
-    return max(0, min(100, score))
+    return max(0, min(100, score)), breakdown
 
 
 async def analyze_url(url: str) -> dict:
@@ -235,13 +245,17 @@ async def analyze_url(url: str) -> dict:
                 f"({f['size_kb']} KB)"
             )
 
-    perf_score = estimate_performance_score(
+    perf_score, base_breakdown = estimate_performance_score(
         response_ms=response_ms,
         html_bytes=html_bytes,
         css_count=css_count,
         google_fonts=google_fonts and not gfonts_display_swap,
         font_display_ok=font_display_ok,
     )
+    # Attach raw measurements so performance.py can write human-readable messages
+    base_breakdown["response_ms"] = round(response_ms)
+    base_breakdown["html_kb"] = round(html_bytes / 1024)
+    base_breakdown["css_count"] = css_count
 
     # Estimate LCP from response time (rough proxy)
     estimated_lcp_ms = round(response_ms * 1.5 + 300)
@@ -261,6 +275,8 @@ async def analyze_url(url: str) -> dict:
         "google_fonts_no_swap": google_fonts and not gfonts_display_swap,
         "render_blocking_count": render_blocking,
         "large_font_files": large_font_files,  # list[{"url": str, "size_kb": float}]
+        # Base score breakdown — lets performance.py explain silent deductions in the UI
+        "base_score_breakdown": base_breakdown,
     }
 
 
