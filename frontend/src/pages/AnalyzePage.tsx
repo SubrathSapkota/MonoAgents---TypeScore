@@ -3,6 +3,7 @@ import { scanApi } from "../api/client";
 import type { AnalysisResult, MetricBreakdown } from "../api/types";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
 import AnalyzeLoadingAnimation from "../components/AnalyzeLoadingAnimation";
+import FontsDetectedSection from "../components/FontsDetectedSection";
 import { parseWebsiteUrl } from "../utils/url";
 
 const METRIC_LABELS: Record<string, { label: string; max: number }> = {
@@ -237,30 +238,11 @@ export default function AnalyzePage() {
           <IssuesBanner result={result} />
 
           {/* Fonts detected */}
-          <div className="dash-card" style={{ marginTop: 24 }}>
+          <div className="dash-card fonts-detected-card" style={{ marginTop: 24 }}>
             <h2 className="dash-card-title" style={{ marginBottom: 16 }}>
               Fonts Detected
             </h2>
-            <div className="fonts-grid">
-              {result.pages.map((page, i) => (
-                <div key={i} className="font-page-card">
-                  <h4 className="font-page-path">{page.path || "/"}</h4>
-                  {page.error ? (
-                    <p className="font-error">{page.error}</p>
-                  ) : (
-                    <div className="font-tags">
-                      {page.fonts.length > 0 ? (
-                        page.fonts.map((f, j) => (
-                          <span key={j} className="font-tag">{f}</span>
-                        ))
-                      ) : (
-                        <span className="font-none">No fonts detected</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <FontsDetectedSection pages={result.pages} />
           </div>
 
           {/* Accessibility violations */}

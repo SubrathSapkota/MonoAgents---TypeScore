@@ -2004,6 +2004,196 @@ input, select, textarea { font-family: var(--font-sans); }
 }
 
 /* ── Fonts detected ─────────────────────────────────────────────────────── */
+.fonts-detected-card {
+  overflow: hidden;
+}
+
+.fonts-detected-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.fonts-detected-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.fonts-detected-stat strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.fonts-detected-stat-sep {
+  opacity: 0.4;
+}
+
+.fonts-detected-table-wrap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: auto;
+  max-height: 420px;
+}
+
+.fonts-detected-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.fonts-detected-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.fonts-detected-table th:last-child {
+  width: 40%;
+  text-align: left;
+}
+
+.fonts-detected-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+}
+
+.fonts-detected-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.fonts-detected-table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.fonts-detected-name {
+  font-weight: 500;
+  color: var(--color-text);
+  max-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fonts-detected-pages-cell {
+  text-align: left;
+}
+
+.fonts-detected-paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fonts-detected-path {
+  display: inline-block;
+  padding: 3px 8px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.fonts-detected-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.fonts-detected-by-page {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.fonts-detected-by-page-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-secondary);
+  margin-bottom: 12px;
+}
+
+.fonts-detected-page-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.fonts-detected-page-block {
+  padding: 12px 14px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+}
+
+.fonts-detected-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.fonts-detected-page-path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.fonts-detected-page-fonts {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.fonts-detected-page-fonts li {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fonts-detected-page-fonts li:last-child {
+  border-bottom: none;
+}
+
+.fonts-detected-errors {
+  margin-top: 12px;
+}
+
 .fonts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
