@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { scanApi } from "../api/client";
 import type { AnalysisResult, MetricBreakdown } from "../api/types";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
+import AnalyzeLoadingAnimation from "../components/AnalyzeLoadingAnimation";
 
 const METRIC_LABELS: Record<string, { label: string; max: number }> = {
   brand_consistency: { label: "Brand Consistency", max: 20 },
@@ -136,15 +137,7 @@ export default function AnalyzePage() {
       </p>
 
       {/* ── Loading ───────────────────────────────────────── */}
-      {loading && (
-        <div className="analyze-loading">
-          <div className="spinner" />
-          <div>
-            <p>Scanning pages, running Lighthouse, checking accessibility…</p>
-            <p className="analyze-loading-sub">This may take 1–2 minutes.</p>
-          </div>
-        </div>
-      )}
+      {loading && <AnalyzeLoadingAnimation />}
 
       {error && <div className="error-banner" style={{ marginTop: 24 }}>{error}</div>}
 
