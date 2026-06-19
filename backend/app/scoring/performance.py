@@ -8,7 +8,7 @@ Monotype Connect remediation guidance.
 Scoring model
 ─────────────
   • Starts from the heuristic base score produced by the analyzer (which
-    already penalises slow TTFB, heavy HTML, and excessive CSS files).
+    already penalises Google Fonts without display=swap).
   • This module then applies the brief-specified deductions on top:
       -10  @font-face rules missing font-display (FOIT risk)
       -5   LCP 2 700 – 4 200 ms  (needs improvement, with 200 ms grace buffer)
@@ -75,40 +75,7 @@ def compute(lighthouse: dict | None) -> tuple[float, list[str]]:
         violations.append(f"Recommendation: {w}")
 
     # ── Base score deductions — explain silently applied penalties ───────────────
-    # estimate_performance_score() in the analyzer deducts points for slow
-    # response time, heavy HTML, and excessive CSS files before this module
-    # even runs.  Without these violation strings the UI shows a gap between
-    # the score and 20/20 with no explanation.  Note: no additional score
-    # deductions are applied here — these points were already removed from
-    # the base score returned by the analyzer.
     bsd = lighthouse.get("base_score_breakdown", {})
-
-    resp_penalty = bsd.get("response_time_penalty", 0)
-    if resp_penalty:
-        resp_ms = bsd.get("response_ms", 0)
-        violations.append(
-            f"Slow server response time: {resp_ms} ms (−{resp_penalty} pts). "
-            "High TTFB delays the start of HTML parsing, CSS download, and font "
-            "discovery — everything loads later as a result."
-        )
-
-    html_penalty = bsd.get("html_size_penalty", 0)
-    if html_penalty:
-        html_kb = bsd.get("html_kb", 0)
-        violations.append(
-            f"Heavy HTML document: {html_kb} KB (−{html_penalty} pts). "
-            "Large HTML payloads increase parse time and push font requests further "
-            "down the critical path."
-        )
-
-    css_penalty = bsd.get("css_count_penalty", 0)
-    if css_penalty:
-        css_count = bsd.get("css_count", 0)
-        violations.append(
-            f"High stylesheet count: {css_count} CSS files detected (−{css_penalty} pts). "
-            "Each render-blocking stylesheet must be downloaded and parsed before "
-            "the browser can begin laying out text and requesting fonts."
-        )
 
     gfonts_penalty = bsd.get("google_fonts_penalty", 0)
     if gfonts_penalty:

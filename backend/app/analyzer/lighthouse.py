@@ -108,42 +108,6 @@ def estimate_performance_score(
     score = 100
     breakdown: dict[str, int] = {}
 
-    # Response time penalty (threshold 800 ms to account for geographic latency)
-    if response_ms > 3000:
-        p = 30
-    elif response_ms > 2000:
-        p = 20
-    elif response_ms > 1000:
-        p = 10
-    elif response_ms > 800:
-        p = 5
-    else:
-        p = 0
-    score -= p
-    breakdown["response_time_penalty"] = p
-
-    # HTML size penalty
-    if html_bytes > 500_000:
-        p = 15
-    elif html_bytes > 200_000:
-        p = 10
-    elif html_bytes > 100_000:
-        p = 5
-    else:
-        p = 0
-    score -= p
-    breakdown["html_size_penalty"] = p
-
-    # CSS file count penalty (threshold 10 — code-split apps commonly have 6-10)
-    if css_count > 15:
-        p = 10
-    elif css_count > 10:
-        p = 5
-    else:
-        p = 0
-    score -= p
-    breakdown["css_count_penalty"] = p
-
     # Google Fonts loaded without display=swap (request-level blocking issue)
     p = 5 if google_fonts else 0
     score -= p
