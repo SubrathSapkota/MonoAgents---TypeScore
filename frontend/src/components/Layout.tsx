@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import ThemeToggle from "./ThemeToggle";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: "◈" },
@@ -42,6 +43,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
+          <ThemeToggle className="sidebar-theme-toggle" />
           <div className="sidebar-user">
             <div className="sidebar-avatar">
               {user?.name?.charAt(0).toUpperCase()}

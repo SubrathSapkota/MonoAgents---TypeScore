@@ -2,6 +2,9 @@ import { useState, type FormEvent } from "react";
 import { scanApi } from "../api/client";
 import type { AnalysisResult, MetricBreakdown } from "../api/types";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
+import AnalyzeLoadingAnimation from "../components/AnalyzeLoadingAnimation";
+import FontsDetectedSection from "../components/FontsDetectedSection";
+import { parseWebsiteUrl } from "../utils/url";
 
 const METRIC_LABELS: Record<string, { label: string; max: number }> = {
   brand_consistency: { label: "Brand Consistency", max: 20 },
@@ -80,21 +83,43 @@ function IssuesBanner({ result }: { result: AnalysisResult }) {
   );
 }
 
+const SCAN_METRICS = [
+  { icon: "◈", label: "Brand consistency" },
+  { icon: "✓", label: "License compliance" },
+  { icon: "⚡", label: "Performance" },
+  { icon: "♿", label: "Accessibility" },
+  { icon: "⌘", label: "Developer experience" },
+];
+
 export default function AnalyzePage() {
   const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
+  function handleUrlChange(value: string) {
+    setUrl(value);
+    if (urlError) setUrlError(null);
+    if (error) setError(null);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!url.trim()) return;
+
+    const parsed = parseWebsiteUrl(url);
+    if (!parsed.valid) {
+      setUrlError(parsed.message);
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    setUrlError(null);
     setResult(null);
 
     try {
-      const data = await scanApi.analyze(url.trim());
+      const data = await scanApi.analyze(parsed.url);
       setResult(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Analysis failed");
@@ -104,49 +129,78 @@ export default function AnalyzePage() {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Analyze Website</h1>
-          <p className="page-subtitle">
-            Scan a URL to get a TypeScore — brand consistency, license compliance,
-            performance, accessibility, and developer experience.
+    <div className="page analyze-page">
+      <section className="analyze-panel">
+        <div className="analyze-panel-glow analyze-panel-glow--1" aria-hidden="true" />
+        <div className="analyze-panel-glow analyze-panel-glow--2" aria-hidden="true" />
+
+        <div className="analyze-panel-header">
+          <p className="analyze-panel-eyebrow">Website scanner</p>
+          <h1 className="analyze-panel-title">Analyze Website</h1>
+          <p className="analyze-panel-subtitle">
+            Enter a URL to generate a TypeScore across brand consistency, license
+            compliance, performance, accessibility, and developer experience.
           </p>
         </div>
-      </div>
 
-      {/* ── URL form ──────────────────────────────────────── */}
-      <form className="analyze-form" onSubmit={handleSubmit}>
-        <input
-          className="form-input analyze-input"
-          type="text"
-          placeholder="https://yourwebsite.com"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          disabled={loading}
-        />
-        <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>
-          {loading ? "Scanning…" : "Run Analysis"}
-        </button>
-      </form>
+        <div className="analyze-metrics">
+          {SCAN_METRICS.map((metric) => (
+            <span key={metric.label} className="analyze-metric-chip">
+              <span className="analyze-metric-icon">{metric.icon}</span>
+              {metric.label}
+            </span>
+          ))}
+        </div>
 
-      <p className="analyze-hint">
-        Tip: Add fonts to your library first — the compliance score will check
-        whether your website uses fonts you've licensed.
-      </p>
+        <form className="analyze-form" onSubmit={handleSubmit} noValidate>
+          <div className="analyze-form-fields">
+            <div className={`analyze-input-wrap${urlError ? " analyze-input-wrap--error" : ""}`}>
+              <span className="analyze-input-icon" aria-hidden="true">
+                ⟳
+              </span>
+              <input
+                className="form-input analyze-input"
+                type="text"
+                inputMode="url"
+                autoComplete="url"
+                placeholder="https://yourwebsite.com"
+                value={url}
+                onChange={(e) => handleUrlChange(e.target.value)}
+                disabled={loading}
+                aria-invalid={urlError ? true : undefined}
+                aria-describedby={urlError ? "analyze-url-error" : undefined}
+              />
+            </div>
+            {urlError && (
+              <p id="analyze-url-error" className="analyze-field-error" role="alert">
+                {urlError}
+              </p>
+            )}
+          </div>
+          <button
+            className="btn btn-primary analyze-submit"
+            type="submit"
+            disabled={loading || !url.trim()}
+          >
+            {loading ? "Scanning…" : "Run Analysis"}
+          </button>
+        </form>
+
+        <div className="analyze-tip">
+          <span className="analyze-tip-icon" aria-hidden="true">
+            i
+          </span>
+          <p>
+            Add fonts to your library first — the compliance score checks whether
+            your site uses fonts you&apos;ve licensed.
+          </p>
+        </div>
+      </section>
 
       {/* ── Loading ───────────────────────────────────────── */}
-      {loading && (
-        <div className="analyze-loading">
-          <div className="spinner" />
-          <div>
-            <p>Scanning pages, running Lighthouse, checking accessibility…</p>
-            <p className="analyze-loading-sub">This may take 1–2 minutes.</p>
-          </div>
-        </div>
-      )}
+      {loading && <AnalyzeLoadingAnimation />}
 
-      {error && <div className="error-banner" style={{ marginTop: 24 }}>{error}</div>}
+      {error && <div className="error-banner analyze-error">{error}</div>}
 
       {/* ── Results ───────────────────────────────────────── */}
       {result && (
@@ -184,30 +238,11 @@ export default function AnalyzePage() {
           <IssuesBanner result={result} />
 
           {/* Fonts detected */}
-          <div className="dash-card" style={{ marginTop: 24 }}>
+          <div className="dash-card fonts-detected-card" style={{ marginTop: 24 }}>
             <h2 className="dash-card-title" style={{ marginBottom: 16 }}>
               Fonts Detected
             </h2>
-            <div className="fonts-grid">
-              {result.pages.map((page, i) => (
-                <div key={i} className="font-page-card">
-                  <h4 className="font-page-path">{page.path || "/"}</h4>
-                  {page.error ? (
-                    <p className="font-error">{page.error}</p>
-                  ) : (
-                    <div className="font-tags">
-                      {page.fonts.length > 0 ? (
-                        page.fonts.map((f, j) => (
-                          <span key={j} className="font-tag">{f}</span>
-                        ))
-                      ) : (
-                        <span className="font-none">No fonts detected</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <FontsDetectedSection pages={result.pages} />
           </div>
 
           {/* Accessibility violations */}

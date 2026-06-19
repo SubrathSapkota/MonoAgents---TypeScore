@@ -12,6 +12,15 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from app.utils.http_client import fetch, fetch_with_timing
+from app.utils.http_client import _SESSION as _HTTP_SESSION  # shared session for HEAD requests
+
+
+# Matches any url(...) value in CSS that ends with a font file extension.
+# Handles quoted/unquoted, absolute and relative paths, and query strings.
+_FONT_URL_RE = re.compile(
+    r"""url\s*\(\s*['"]?((?:https?://|//)?[^'")\s]+\.(?:woff2?|ttf|otf|eot)[^'")\s]*?)['"]?\s*\)""",
+    re.IGNORECASE,
+)
 
 
 def check_font_display(css_text: str) -> bool:
@@ -24,52 +33,123 @@ def check_font_display(css_text: str) -> bool:
     return True
 
 
+def check_font_file_sizes(css: str, base_url: str, limit: int = 5) -> list[dict]:
+    """
+    Extract font file URLs from @font-face src declarations and HEAD-request
+    each one to measure its Content-Length.
+
+    Returns a list of {"url": str, "size_kb": float} for every font file
+    that could be measured.  Files whose size cannot be determined (no
+    Content-Length header, network error, data: URIs) are silently skipped.
+
+    Parameters
+    ----------
+    css      : concatenated CSS text already collected by analyze_url()
+    base_url : page origin used to resolve relative URLs
+    limit    : maximum number of font files to probe (keeps scan time bounded)
+    """
+    seen: set[str] = set()
+    results: list[dict] = []
+
+    for m in _FONT_URL_RE.finditer(css):
+        raw = m.group(1).strip()
+
+        # Skip data URIs — they are inline and have no transfer size
+        if raw.startswith("data:"):
+            continue
+
+        # Resolve protocol-relative and relative URLs
+        if raw.startswith("//"):
+            raw = "https:" + raw
+        elif not raw.startswith("http"):
+            raw = urljoin(base_url, raw)
+
+        if raw in seen:
+            continue
+        seen.add(raw)
+
+        if len(results) >= limit:
+            break
+
+        try:
+            resp = _HTTP_SESSION.head(raw, timeout=5, allow_redirects=True)
+            content_length = int(resp.headers.get("content-length", 0))
+            if content_length > 0:
+                results.append({
+                    "url": raw,
+                    "size_kb": round(content_length / 1024, 1),
+                })
+        except Exception:
+            pass  # network error or unsupported method — skip silently
+
+    return results
+
+
 def estimate_performance_score(
     response_ms: float,
     html_bytes: int,
     css_count: int,
     google_fonts: bool,
-    font_display_ok: bool,
-) -> int:
+    font_display_ok: bool,  # retained for API compat; deduction applied in scoring/performance.py
+) -> tuple[int, dict]:
     """
-    Heuristic performance score (0-100).
-    Deducts points for slow response, heavy HTML, many CSS files, blocking fonts.
+    Heuristic performance score (0-100) plus a breakdown of every deduction.
+
+    Returns
+    -------
+    (score: int, breakdown: dict)
+      breakdown keys: response_time_penalty, html_size_penalty,
+                      css_count_penalty, google_fonts_penalty
+      (all values are non-negative integers representing points deducted)
+
+    Note: the font-display @font-face deduction (-10) is applied in
+    scoring/performance.py so all scoring decisions live in one place.
     """
     score = 100
+    breakdown: dict[str, int] = {}
 
-    # Response time penalty
+    # Response time penalty (threshold 800 ms to account for geographic latency)
     if response_ms > 3000:
-        score -= 30
+        p = 30
     elif response_ms > 2000:
-        score -= 20
+        p = 20
     elif response_ms > 1000:
-        score -= 10
-    elif response_ms > 500:
-        score -= 5
+        p = 10
+    elif response_ms > 800:
+        p = 5
+    else:
+        p = 0
+    score -= p
+    breakdown["response_time_penalty"] = p
 
-    # HTML size penalty (over 100KB is heavy)
+    # HTML size penalty
     if html_bytes > 500_000:
-        score -= 15
+        p = 15
     elif html_bytes > 200_000:
-        score -= 10
+        p = 10
     elif html_bytes > 100_000:
-        score -= 5
+        p = 5
+    else:
+        p = 0
+    score -= p
+    breakdown["html_size_penalty"] = p
 
-    # Too many CSS files = render-blocking risk
-    if css_count > 10:
-        score -= 10
-    elif css_count > 5:
-        score -= 5
+    # CSS file count penalty (threshold 10 — code-split apps commonly have 6-10)
+    if css_count > 15:
+        p = 10
+    elif css_count > 10:
+        p = 5
+    else:
+        p = 0
+    score -= p
+    breakdown["css_count_penalty"] = p
 
-    # Google Fonts loaded without display=swap is blocking
-    if google_fonts:
-        score -= 5
+    # Google Fonts loaded without display=swap (request-level blocking issue)
+    p = 5 if google_fonts else 0
+    score -= p
+    breakdown["google_fonts_penalty"] = p
 
-    # Missing font-display in @font-face
-    if not font_display_ok:
-        score -= 10
-
-    return max(0, min(100, score))
+    return max(0, min(100, score)), breakdown
 
 
 async def analyze_url(url: str) -> dict:
@@ -153,13 +233,29 @@ async def analyze_url(url: str) -> dict:
     if font_face_count > 8:
         font_warnings.append(f"{font_face_count} @font-face declarations — consider subsetting or reducing variants")
 
-    perf_score = estimate_performance_score(
+    # Check font file sizes via HEAD requests (brief: flag files > 100KB)
+    large_font_files = [
+        f for f in check_font_file_sizes(all_css, url)
+        if f["size_kb"] > 100
+    ]
+    if large_font_files:
+        for f in large_font_files:
+            font_warnings.append(
+                f"Font file exceeds 100 KB: {f['url'].split('/')[-1].split('?')[0]} "
+                f"({f['size_kb']} KB)"
+            )
+
+    perf_score, base_breakdown = estimate_performance_score(
         response_ms=response_ms,
         html_bytes=html_bytes,
         css_count=css_count,
         google_fonts=google_fonts and not gfonts_display_swap,
         font_display_ok=font_display_ok,
     )
+    # Attach raw measurements so performance.py can write human-readable messages
+    base_breakdown["response_ms"] = round(response_ms)
+    base_breakdown["html_kb"] = round(html_bytes / 1024)
+    base_breakdown["css_count"] = css_count
 
     # Estimate LCP from response time (rough proxy)
     estimated_lcp_ms = round(response_ms * 1.5 + 300)
@@ -171,8 +267,16 @@ async def analyze_url(url: str) -> dict:
     return {
         "performance": perf_score,
         "lcp_ms": estimated_lcp_ms,
-        "cls": None,  # Not measurable without a browser
+        "cls": None,  # Not measurable without a real browser
         "font_warnings": font_warnings,
+        # Raw signals consumed by scoring/performance.py for explicit deductions
+        "font_display_ok": font_display_ok,
+        "has_font_face": has_font_face,
+        "google_fonts_no_swap": google_fonts and not gfonts_display_swap,
+        "render_blocking_count": render_blocking,
+        "large_font_files": large_font_files,  # list[{"url": str, "size_kb": float}]
+        # Base score breakdown — lets performance.py explain silent deductions in the UI
+        "base_score_breakdown": base_breakdown,
     }
 
 

@@ -20,6 +20,55 @@ const METRIC_LABELS: Record<string, string> = {
   developer_experience: "Developer Experience",
 };
 
+const STAT_CARDS = [
+  {
+    key: "fonts",
+    label: "Fonts in Library",
+    icon: "Aa",
+    accent: "stat-card--indigo",
+    getValue: (fonts: UserFont[]) => fonts.length,
+    getMeta: (fonts: UserFont[]) =>
+      `${fonts.filter((f) => f.has_license_data).length} with license data`,
+  },
+  {
+    key: "scans",
+    label: "Scans Run",
+    icon: "⟳",
+    accent: "stat-card--violet",
+    getValue: (_fonts: UserFont[], scans: ScanSummary[]) =>
+      scans.length > 4 ? "5+" : scans.length,
+    getMeta: () => "recent analyses",
+  },
+  {
+    key: "score",
+    label: "Avg. TypeScore",
+    icon: "◈",
+    accent: "stat-card--emerald",
+    getValue: (_fonts: UserFont[], scans: ScanSummary[]) => {
+      if (scans.length === 0) return "—";
+      return Math.round(
+        scans.reduce((sum, s) => sum + (s.overall_score ?? 0), 0) / scans.length
+      );
+    },
+    getMeta: (_fonts: UserFont[], scans: ScanSummary[]) =>
+      scans.length ? "across all scans" : "no scans yet",
+    colorize: true,
+  },
+  {
+    key: "license",
+    label: "License Coverage",
+    icon: "✓",
+    accent: "stat-card--amber",
+    getValue: (fonts: UserFont[]) =>
+      fonts.length
+        ? Math.round(
+            (fonts.filter((f) => f.license_type).length / fonts.length) * 100
+          ) + "%"
+        : "—",
+    getMeta: () => "fonts with assigned license",
+  },
+] as const;
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [fonts, setFonts] = useState<UserFont[]>([]);
@@ -55,57 +104,61 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="page">
-      {/* ── Page header ─────────────────────────────────────── */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">
+    <div className="page dashboard-page">
+      {/* ── Hero ──────────────────────────────────────────────── */}
+      <section className="dashboard-hero">
+        <div className="dashboard-hero-glow dashboard-hero-glow--1" aria-hidden="true" />
+        <div className="dashboard-hero-glow dashboard-hero-glow--2" aria-hidden="true" />
+        <div className="dashboard-hero-content">
+          <p className="dashboard-hero-eyebrow">Font compliance dashboard</p>
+          <h1 className="dashboard-hero-title">
             {getGreeting()}, {user?.name?.split(" ")[0]}.
           </h1>
-          <p className="page-subtitle">Here's your font compliance overview.</p>
+          <p className="dashboard-hero-subtitle">
+            Track license coverage, scan results, and font health across your projects — all in one place.
+          </p>
+          <div className="dashboard-hero-actions">
+            <Link to="/analyze" className="btn btn-primary">
+              Run Analysis
+            </Link>
+            <Link to="/library" className="btn btn-secondary">
+              Manage Fonts
+            </Link>
+          </div>
         </div>
-        <Link to="/analyze" className="btn btn-primary">
-          Run Analysis
-        </Link>
-      </div>
+        {avgScore !== null && (
+          <div className="dashboard-hero-score">
+            <ScoreRing score={avgScore} size={100} />
+            <span className="dashboard-hero-score-label">Avg. score</span>
+          </div>
+        )}
+      </section>
 
       {/* ── Stat cards ──────────────────────────────────────── */}
       <div className="stat-grid">
-        <div className="stat-card">
-          <span className="stat-label">Fonts in Library</span>
-          <span className="stat-value">{fonts.length}</span>
-          <span className="stat-meta">
-            {fonts.filter((f) => f.has_license_data).length} with license data
-          </span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Scans Run</span>
-          <span className="stat-value">{scans.length > 4 ? "5+" : scans.length}</span>
-          <span className="stat-meta">recent analyses</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Avg. TypeScore</span>
-          <span
-            className="stat-value"
-            style={{ color: avgScore ? scoreColor(avgScore) : undefined }}
-          >
-            {avgScore ?? "—"}
-          </span>
-          <span className="stat-meta">
-            {avgScore ? "across all scans" : "no scans yet"}
-          </span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">License Coverage</span>
-          <span className="stat-value">
-            {fonts.length
-              ? Math.round(
-                  (fonts.filter((f) => f.license_type).length / fonts.length) * 100
-                ) + "%"
-              : "—"}
-          </span>
-          <span className="stat-meta">fonts with assigned license</span>
-        </div>
+        {STAT_CARDS.map((card) => {
+          const value = card.getValue(fonts, scans);
+          const numericValue =
+            card.key === "score" && typeof value === "number" ? value : null;
+
+          return (
+            <div key={card.key} className={`stat-card ${card.accent}`}>
+              <div className="stat-card-top">
+                <span className="stat-label">{card.label}</span>
+                <span className="stat-icon">{card.icon}</span>
+              </div>
+              <span
+                className="stat-value"
+                style={{
+                  color: numericValue ? scoreColor(numericValue) : undefined,
+                }}
+              >
+                {value}
+              </span>
+              <span className="stat-meta">{card.getMeta(fonts, scans)}</span>
+            </div>
+          );
+        })}
       </div>
 
       <div className="dashboard-grid">
@@ -170,8 +223,12 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="dash-empty">
+              <div className="dash-empty-icon">◈</div>
               <p>No scans yet.</p>
-              <Link to="/analyze" className="btn btn-primary" style={{ marginTop: 12 }}>
+              <p className="dash-empty-hint">
+                Analyze a URL to get your first TypeScore breakdown.
+              </p>
+              <Link to="/analyze" className="btn btn-primary" style={{ marginTop: 16 }}>
                 Run your first analysis
               </Link>
             </div>
@@ -213,8 +270,12 @@ export default function DashboardPage() {
             </ul>
           ) : (
             <div className="dash-empty">
+              <div className="dash-empty-icon">Aa</div>
               <p>No fonts in your library.</p>
-              <Link to="/library" className="btn btn-secondary" style={{ marginTop: 12 }}>
+              <p className="dash-empty-hint">
+                Add fonts from the catalog or upload your own.
+              </p>
+              <Link to="/library" className="btn btn-secondary" style={{ marginTop: 16 }}>
                 Add fonts
               </Link>
             </div>
@@ -224,7 +285,7 @@ export default function DashboardPage() {
 
       {/* ── Recent scans table ──────────────────────────────── */}
       {scans.length > 1 && (
-        <div className="dash-card" style={{ marginTop: 24 }}>
+        <div className="dash-card dashboard-recent">
           <div className="dash-card-header">
             <h2 className="dash-card-title">Recent Analyses</h2>
             <Link to="/history" className="dash-card-link">
