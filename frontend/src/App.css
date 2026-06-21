@@ -2620,7 +2620,12 @@ input, select, textarea { font-family: var(--font-sans); }
    HISTORY PAGE
    ══════════════════════════════════════════════════════════════════════════ */
 
-.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scroll-margin-top: 24px;
+}
 
 .history-entry {
   background: var(--color-surface);
@@ -2737,6 +2742,102 @@ input, select, textarea { font-family: var(--font-sans); }
   display: flex;
   justify-content: center;
   padding: 20px;
+}
+
+.history-list-loading {
+  display: flex;
+  justify-content: center;
+  padding: 32px;
+}
+
+.history-page-range {
+  color: var(--color-text-secondary);
+}
+
+.history-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.history-pagination-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+
+.history-page-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 36px;
+  min-width: 84px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.history-page-nav:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.history-page-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.history-page-nav-icon {
+  font-size: 18px;
+  line-height: 1;
+  margin-top: -1px;
+}
+
+.history-page-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 88px;
+  padding: 0 16px;
+  border-left: 1px solid var(--color-border-light);
+  border-right: 1px solid var(--color-border-light);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.history-page-current {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.history-page-sep {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  line-height: 1;
+}
+
+.history-page-total {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  line-height: 1;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

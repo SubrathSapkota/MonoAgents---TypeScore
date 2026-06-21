@@ -89,6 +89,6 @@ export const scanApi = {
 
 export const historyApi = {
   list: (limit = 20, offset = 0) =>
-    request<import("./types").ScanSummary[]>("GET", `/history?limit=${limit}&offset=${offset}`),
+    request<import("./types").PaginatedScans>("GET", `/history?limit=${limit}&offset=${offset}`),
   get: (id: number) => request<import("./types").ScanDetail>("GET", `/history/${id}`),
 };
