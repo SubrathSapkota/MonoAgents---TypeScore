@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -36,13 +36,27 @@ class ScanDetailSchema(ScanSummarySchema):
     raw_data: dict
 
 
-@router.get("", response_model=List[ScanSummarySchema])
+class PaginatedHistorySchema(BaseModel):
+    items: List[ScanSummarySchema]
+    total: int
+    limit: int
+    offset: int
+
+
+@router.get("", response_model=PaginatedHistorySchema)
 async def list_history(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    total_result = await db.execute(
+        select(func.count())
+        .select_from(ScanResult)
+        .where(ScanResult.user_id == user.id)
+    )
+    total = total_result.scalar_one()
+
     result = await db.execute(
         select(ScanResult)
         .where(ScanResult.user_id == user.id)
@@ -51,7 +65,12 @@ async def list_history(
         .offset(offset)
     )
     scans = result.scalars().all()
-    return [_to_summary(s) for s in scans]
+    return PaginatedHistorySchema(
+        items=[_to_summary(s) for s in scans],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{scan_id}", response_model=ScanDetailSchema)

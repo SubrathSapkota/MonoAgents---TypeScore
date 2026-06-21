@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { historyApi } from "../api/client";
 import type { ScanSummary, ScanDetail } from "../api/types";
 import IssuesAccordion from "../components/IssuesAccordion";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
+
+const PAGE_SIZE = 10;
 
 const METRIC_LABELS: Record<string, string> = {
   brand_consistency: "Brand",
@@ -105,23 +107,46 @@ function ExpandedDetail({ scanId }: { scanId: number }) {
 
 export default function HistoryPage() {
   const [scans, setScans] = useState<ScanSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
+    setExpandedId(null);
+
     historyApi
-      .list(50)
-      .then(setScans)
+      .list(PAGE_SIZE, (page - 1) * PAGE_SIZE)
+      .then((data) => {
+        setScans(data.items);
+        setTotal(data.total);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    if (!loading && listRef.current) {
+      listRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [page, loading]);
 
   function toggleExpand(id: number) {
     setExpandedId((prev) => (prev === id ? null : id));
   }
 
-  if (loading) {
+  function goToPage(nextPage: number) {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
+    setPage(nextPage);
+  }
+
+  if (loading && scans.length === 0) {
     return (
       <div className="page-loading">
         <div className="spinner" />
@@ -129,38 +154,86 @@ export default function HistoryPage() {
     );
   }
 
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, total);
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Scan History</h1>
           <p className="page-subtitle">
-            {scans.length} analysis{scans.length !== 1 ? "es" : ""} recorded
+            {total} analysis{total !== 1 ? "es" : ""} recorded
+            {total > 0 && (
+              <span className="history-page-range">
+                {" "}· showing {rangeStart}–{rangeEnd}
+              </span>
+            )}
           </p>
         </div>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
 
-      {scans.length === 0 && !error ? (
+      {total === 0 && !error ? (
         <div className="empty-state">
           <div className="empty-icon">⊡</div>
           <h3>No scans yet</h3>
           <p>Run your first website analysis from the Analyze page.</p>
         </div>
       ) : (
-        <div className="history-list">
-          {scans.map((scan) => (
-            <div key={scan.id} className="history-entry">
-              <HistoryRow
-                scan={scan}
-                onExpand={() => toggleExpand(scan.id)}
-                isExpanded={expandedId === scan.id}
-              />
-              {expandedId === scan.id && <ExpandedDetail scanId={scan.id} />}
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="history-list" ref={listRef}>
+            {loading ? (
+              <div className="history-list-loading">
+                <div className="spinner spinner-sm" />
+              </div>
+            ) : (
+              scans.map((scan) => (
+                <div key={scan.id} className="history-entry">
+                  <HistoryRow
+                    scan={scan}
+                    onExpand={() => toggleExpand(scan.id)}
+                    isExpanded={expandedId === scan.id}
+                  />
+                  {expandedId === scan.id && <ExpandedDetail scanId={scan.id} />}
+                </div>
+              ))
+            )}
+          </div>
+
+          {totalPages > 1 && (
+            <nav className="history-pagination" aria-label="Scan history pages">
+              <div className="history-pagination-inner">
+                <button
+                  type="button"
+                  className="history-page-nav"
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page <= 1 || loading}
+                  aria-label="Previous page"
+                >
+                  <span className="history-page-nav-icon" aria-hidden="true">‹</span>
+                  <span>Prev</span>
+                </button>
+                <div className="history-page-indicator">
+                  <span className="history-page-current">{page}</span>
+                  <span className="history-page-sep">of</span>
+                  <span className="history-page-total">{totalPages}</span>
+                </div>
+                <button
+                  type="button"
+                  className="history-page-nav"
+                  onClick={() => goToPage(page + 1)}
+                  disabled={page >= totalPages || loading}
+                  aria-label="Next page"
+                >
+                  <span>Next</span>
+                  <span className="history-page-nav-icon" aria-hidden="true">›</span>
+                </button>
+              </div>
+            </nav>
+          )}
+        </>
       )}
     </div>
   );
