@@ -66,12 +66,6 @@ _MONOTYPE_CONNECT_HINTS: dict[str, str] = {
         "across your brand font tokens — approved weight standards prevent ultra-thin "
         "variants from being applied to body text where stroke contrast is critical."
     ),
-    "pdf-untagged": (
-        "Monotype Connect: fonts licensed through Connect include proper embedding "
-        "rights and ToUnicode tables required for tagged PDF export — using approved "
-        "fonts in document workflows ensures PDFs are both license-compliant and "
-        "screen-reader accessible."
-    ),
     "lang-font-mismatch": (
         "Monotype Connect: your licensed font library should cover every script your "
         "content serves — Monotype's multilingual catalogue provides brand-consistent "

@@ -10,29 +10,18 @@ Checks performed:
   2. CSS font sizes below 12px — type is too small for low-vision users
   3. CSS near-white text colour — likely contrast failure tied to the font/colour pairing
   4. Ultra-thin font weights    — font-weight 100/200 lacks stroke contrast for body text
-  5. Untagged PDFs              — embedded fonts without structure tags block screen readers
-  6. Lang/font script mismatch  — declared script (Arabic, CJK, etc.) with only Latin fonts
-  7. Viewport blocks text scaling — users with low vision cannot zoom to a readable size
+  5. Lang/font script mismatch  — declared script (Arabic, CJK, etc.) with only Latin fonts
+  6. Viewport blocks text scaling — users with low vision cannot zoom to a readable size
 """
 
 from __future__ import annotations
 
-import asyncio
-import io
 import re
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from app.utils.http_client import fetch, fetch_bytes
-
-# ── pypdf availability (optional dependency — PDF check gracefully skipped if absent) ──
-try:
-    import pypdf as _pypdf
-    _PYPDF_AVAILABLE = True
-except ImportError:
-    _pypdf = None  # type: ignore[assignment]
-    _PYPDF_AVAILABLE = False
+from app.utils.http_client import fetch
 
 
 # ── Pre-compiled patterns ──────────────────────────────────────────────────────
@@ -72,21 +61,8 @@ _VIEWPORT_NO_ZOOM_RE = re.compile(
     re.IGNORECASE,
 )
 
-# href ending in .pdf (with optional query string).
-_PDF_HREF_RE = re.compile(r"\.pdf(\?[^\s\"']*)?$", re.IGNORECASE)
-
 # Font-size threshold (px).
 _MIN_ACCESSIBLE_FONT_PX = 12.0
-
-# Maximum PDFs to download per scan.  Kept low to stay within the 60s total scan budget.
-_MAX_PDF_SCANS = 2
-
-# Per-PDF download timeout (seconds).  Tight enough to not blow the overall scan budget
-# even in the worst case: 2 PDFs × 8s = 16s maximum added latency.
-_PDF_FETCH_TIMEOUT_S = 8
-
-# Maximum PDF size to download.  2 MB is enough to read the document catalog header.
-_PDF_MAX_BYTES = 2 * 1024 * 1024
 
 # Language codes → script name for non-Latin languages.
 # Presence in this dict means the page's declared script cannot be rendered by
@@ -205,84 +181,6 @@ def check_lang_font_mismatch(lang: str, css_text: str) -> list[str]:
     ]
 
 
-# ── PDF helpers ────────────────────────────────────────────────────────────────
-
-def _is_pdf_tagged(pdf_bytes: bytes) -> bool:
-    """
-    Return True if the PDF has accessibility structure tags (MarkInfo.Marked = True).
-    An untagged PDF means screen readers cannot extract text or navigate headings.
-    Returns False if pypdf is unavailable or the file cannot be parsed.
-    """
-    if not _PYPDF_AVAILABLE:
-        return False
-    try:
-        reader = _pypdf.PdfReader(io.BytesIO(pdf_bytes))
-        root_ref = reader.trailer.get("/Root")
-        if root_ref is None:
-            return False
-        root = root_ref.get_object() if hasattr(root_ref, "get_object") else root_ref
-        mark_info = root.get("/MarkInfo")
-        if mark_info is None:
-            return False
-        mark_obj = mark_info.get_object() if hasattr(mark_info, "get_object") else mark_info
-        return bool(mark_obj.get("/Marked", False))
-    except Exception as e:
-        print(f"[a11y] PDF tag check error: {e}")
-        return False
-
-
-def check_pdf_accessibility(soup: BeautifulSoup, base_url: str) -> list[dict]:
-    """
-    Collect PDF links from the page, download up to _MAX_PDF_SCANS, and flag any
-    that are not tagged for accessibility.
-
-    Intentionally synchronous — called via run_in_executor from the async analyser
-    so PDF downloads do not block the FastAPI event loop.
-    """
-    pdf_urls: list[str] = []
-    seen: set[str] = set()
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if _PDF_HREF_RE.search(href):
-            abs_url = urljoin(base_url, href)
-            if abs_url not in seen:
-                seen.add(abs_url)
-                pdf_urls.append(abs_url)
-
-    if not pdf_urls:
-        return []
-
-    to_scan = pdf_urls[:_MAX_PDF_SCANS]
-    print(
-        f"[a11y] Found {len(pdf_urls)} PDF link(s), scanning {len(to_scan)} "
-        f"(timeout {_PDF_FETCH_TIMEOUT_S}s each, max {_PDF_MAX_BYTES // 1024 // 1024}MB each)"
-    )
-
-    scanned = 0
-    untagged = 0
-    for pdf_url in to_scan:
-        data = fetch_bytes(pdf_url, timeout=_PDF_FETCH_TIMEOUT_S, max_bytes=_PDF_MAX_BYTES)
-        if data is None:
-            continue
-        scanned += 1
-        if not _is_pdf_tagged(data):
-            untagged += 1
-
-    if scanned == 0 or untagged == 0:
-        return []
-
-    return [{
-        "id": "pdf-untagged",
-        "impact": "critical",
-        "count": untagged,
-        "description": (
-            f"{untagged} of {scanned} scanned PDF(s) missing accessibility tags — "
-            f"screen readers cannot extract text or navigate document structure; "
-            f"embedded fonts likely lack ToUnicode tables required for text selection"
-        ),
-    }]
-
-
 # ── Main analyser ─────────────────────────────────────────────────────────────
 
 async def analyze_accessibility(url: str) -> dict:
@@ -396,17 +294,7 @@ async def analyze_accessibility(url: str) -> dict:
                     "description": issue,
                 })
 
-    # ── 6. PDF accessibility ──────────────────────────────────────────────────
-    # Run in a thread executor so the blocking PDF downloads do not stall the
-    # FastAPI event loop while waiting for each file to transfer.
-    loop = asyncio.get_event_loop()
-    pdf_violations = await loop.run_in_executor(
-        None, check_pdf_accessibility, soup, url
-    )
-    for v in pdf_violations:
-        violations.append(v)
-
-    # ── 7. Viewport meta — blocks text scaling ────────────────────────────────
+    # ── 6. Viewport meta — blocks text scaling ────────────────────────────────
     # When user scaling is disabled, visitors with low vision cannot zoom to a
     # readable font size (WCAG 1.4.4 Resize Text, Level AA).
     viewport_meta = soup.find("meta", attrs={"name": "viewport"})
