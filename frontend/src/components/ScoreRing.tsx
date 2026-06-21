@@ -15,6 +15,18 @@ export function scoreGrade(score: number): string {
   return "F";
 }
 
+function ringStroke(size: number): number {
+  return Math.max(4, Math.round(size * 0.055));
+}
+
+function scoreTextSize(size: number, stroke: number, scoreText: string): number {
+  const inner = size - stroke * 2 - 6;
+  const chars = Math.max(scoreText.length, 1);
+  const maxByWidth = inner / (chars * 0.58);
+  const maxByHeight = size * 0.3;
+  return Math.floor(Math.min(maxByWidth, maxByHeight, size * 0.28));
+}
+
 export function ScoreRing({
   score,
   size = 160,
@@ -25,13 +37,16 @@ export function ScoreRing({
   label?: string;
 }) {
   const [ready, setReady] = useState(false);
-  const stroke = 8;
+  const stroke = ringStroke(size);
   const radius = (size - stroke) / 2;
   const circ = 2 * Math.PI * radius;
   const targetOffset = circ - (score / 100) * circ;
   const offset = ready ? targetOffset : circ;
   const animatedScore = useCountUp(score, 1200, 150);
   const grade = label ?? scoreGrade(score);
+  const scoreText = String(animatedScore);
+  const numberSize = scoreTextSize(size, stroke, scoreText);
+  const gradeSize = Math.max(9, Math.round(numberSize * 0.36));
 
   useEffect(() => {
     setReady(false);
@@ -70,16 +85,18 @@ export function ScoreRing({
         />
       </svg>
       <div className="score-ring-inner">
-        <span className="score-number" style={{ color: scoreColor(score) }}>
+        <span
+          className="score-number"
+          style={{ color: scoreColor(score), fontSize: numberSize }}
+        >
           {animatedScore}
         </span>
-        {label ? (
-          <span className="score-grade" style={{ fontSize: 11 }}>
-            {grade}
-          </span>
-        ) : (
-          <span className="score-grade">{grade}</span>
-        )}
+        <span
+          className="score-grade"
+          style={{ fontSize: label ? Math.max(8, gradeSize - 1) : gradeSize }}
+        >
+          {grade}
+        </span>
       </div>
     </div>
   );

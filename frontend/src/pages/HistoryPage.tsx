@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { historyApi } from "../api/client";
 import type { ScanSummary, ScanDetail } from "../api/types";
+import IssuesAccordion from "../components/IssuesAccordion";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
 
 const METRIC_LABELS: Record<string, string> = {
@@ -95,19 +96,7 @@ function ExpandedDetail({ scanId }: { scanId: number }) {
           <ScoreRing score={detail.overall_score ?? 0} size={100} />
         </div>
         <div className="history-detail-issues">
-          <h4 className="history-detail-heading">Issues</h4>
-          {detail.issues.length > 0 ? (
-            <ul className="issues-list">
-              {detail.issues.map((issue, i) => (
-                <li key={i} className="issue-item">
-                  <span className="issue-metric">{issue.metric.replace(/_/g, " ")}</span>
-                  <span className="issue-message">{issue.message}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="metric-no-issues">✓ No issues recorded</p>
-          )}
+          <IssuesAccordion issues={detail.issues} variant="embedded" />
         </div>
       </div>
     </div>

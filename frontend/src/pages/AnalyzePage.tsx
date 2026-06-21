@@ -4,6 +4,7 @@ import type { AnalysisResult, MetricBreakdown } from "../api/types";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
 import AnalyzeLoadingAnimation from "../components/AnalyzeLoadingAnimation";
 import FontsDetectedSection from "../components/FontsDetectedSection";
+import IssuesAccordion from "../components/IssuesAccordion";
 import { useCountUp } from "../hooks/useCountUp";
 import { parseWebsiteUrl } from "../utils/url";
 
@@ -80,73 +81,9 @@ function MetricCard({
   );
 }
 
-const METRIC_ICONS: Record<string, string> = {
-  brand_consistency: "◈",
-  license_compliance: "✓",
-  performance: "⚡",
-  accessibility: "♿",
-  developer_experience: "⌘",
-};
-
-function IssuesBanner({ result }: { result: AnalysisResult }) {
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-
-  const grouped = Object.entries(result.scores.breakdown)
-    .map(([key, data]) => ({ key, violations: data.violations }))
-    .filter(({ violations }) => violations.length > 0);
-
-  if (grouped.length === 0) return null;
-
-  const totalIssues = grouped.reduce((sum, g) => sum + g.violations.length, 0);
-
-  function toggle(key: string) {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
-
-  return (
-    <div className="dash-card" style={{ marginTop: 24 }}>
-      <div className="issues-banner-header">
-        <h2 className="dash-card-title">Issues Found</h2>
-        <span className="issues-total-badge">{totalIssues} issue{totalIssues !== 1 ? "s" : ""}</span>
-      </div>
-      <div className="issues-accordion">
-        {grouped.map(({ key, violations }) => {
-          const meta = METRIC_LABELS[key] ?? { label: key, max: 100 };
-          const icon = METRIC_ICONS[key] ?? "•";
-          const isOpen = openSections[key] ?? false;
-          return (
-            <div key={key} className={`issues-section${isOpen ? " issues-section--open" : ""}`}>
-              <button
-                className="issues-section-header"
-                onClick={() => toggle(key)}
-                aria-expanded={isOpen}
-              >
-                <div className="issues-section-left">
-                  <span className="issues-section-icon" aria-hidden="true">{icon}</span>
-                  <span className="issues-section-label">{meta.label}</span>
-                  <span className="issues-count-badge">{violations.length}</span>
-                </div>
-                <span className={`issues-chevron${isOpen ? " issues-chevron--open" : ""}`} aria-hidden="true">
-                  ▸
-                </span>
-              </button>
-              {isOpen && (
-                <div className="issues-section-body">
-                  <ul className="issues-section-list">
-                    {violations.map((v, i) => (
-                      <li key={i} className="issues-section-item">
-                        <span className="issues-section-bullet" aria-hidden="true">—</span>
-                        <span className="issue-message">{v}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+function buildIssuesFromResult(result: AnalysisResult) {
+  return Object.entries(result.scores.breakdown).flatMap(([metric, data]) =>
+    data.violations.map((message) => ({ metric, message })),
   );
 }
 
@@ -317,7 +254,7 @@ export default function AnalyzePage() {
           </div>
 
           {/* Issues */}
-          <IssuesBanner result={result} />
+          <IssuesAccordion issues={buildIssuesFromResult(result)} />
 
           {/* Fonts detected */}
           <div className="dash-card fonts-detected-card" style={{ marginTop: 24 }}>
