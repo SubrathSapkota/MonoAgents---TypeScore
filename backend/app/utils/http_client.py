@@ -73,6 +73,35 @@ def fetch(url: str, timeout: int = 20) -> Optional[str]:
         return None
 
 
+def fetch_bytes(
+    url: str,
+    timeout: int = 15,
+    max_bytes: int = 5 * 1024 * 1024,
+) -> Optional[bytes]:
+    """
+    Fetch a URL and return raw bytes (for binary files such as PDFs), or None on error.
+    Streams the response and aborts if the download would exceed max_bytes.
+    """
+    try:
+        resp = _SESSION.get(url, timeout=timeout, allow_redirects=True, stream=True)
+        resp.raise_for_status()
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in resp.iter_content(chunk_size=8192):
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > max_bytes:
+                print(
+                    f"[http_client] {url}: exceeds "
+                    f"{max_bytes // 1024 // 1024} MB limit, skipping"
+                )
+                return None
+        return b"".join(chunks)
+    except Exception as e:
+        print(f"[http_client] Failed to fetch bytes from {url}: {e}")
+        return None
+
+
 def fetch_with_timing(url: str, timeout: int = 20) -> tuple[Optional[str], float]:
     """
     Fetch a URL and return (text, elapsed_ms). Returns (None, 0.0) on error.
