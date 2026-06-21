@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { scanApi } from "../api/client";
 import type { AnalysisResult, MetricBreakdown } from "../api/types";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
 import AnalyzeLoadingAnimation from "../components/AnalyzeLoadingAnimation";
 import FontsDetectedSection from "../components/FontsDetectedSection";
+import { useCountUp } from "../hooks/useCountUp";
 import { parseWebsiteUrl } from "../utils/url";
 
 const METRIC_LABELS: Record<string, { label: string; max: number }> = {
@@ -14,13 +15,33 @@ const METRIC_LABELS: Record<string, { label: string; max: number }> = {
   developer_experience: { label: "Developer Experience", max: 15 },
 };
 
-function MetricCard({ metricKey, data }: { metricKey: string; data: MetricBreakdown }) {
+function MetricCard({
+  metricKey,
+  data,
+  index,
+}: {
+  metricKey: string;
+  data: MetricBreakdown;
+  index: number;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [barReady, setBarReady] = useState(false);
   const meta = METRIC_LABELS[metricKey] ?? { label: metricKey, max: 100 };
   const displayScore = Math.round((data.score / 100) * meta.max);
+  const barDelay = 200 + index * 120;
+  const animatedScore = useCountUp(displayScore, 900, barDelay);
+
+  useEffect(() => {
+    setBarReady(false);
+    const timeout = window.setTimeout(() => setBarReady(true), barDelay);
+    return () => window.clearTimeout(timeout);
+  }, [barDelay, data.score]);
 
   return (
-    <div className="metric-card">
+    <div
+      className="metric-card"
+      style={{ "--metric-delay": `${index * 80}ms` } as CSSProperties}
+    >
       <div className="metric-header" onClick={() => setExpanded(!expanded)}>
         <div>
           <h3 className="metric-label">{meta.label}</h3>
@@ -28,7 +49,7 @@ function MetricCard({ metricKey, data }: { metricKey: string; data: MetricBreakd
         </div>
         <div className="metric-score-wrap">
           <span className="metric-score" style={{ color: scoreColor(data.score) }}>
-            {displayScore}
+            {animatedScore}
           </span>
           <span className="metric-score-max">/{meta.max}</span>
         </div>
@@ -36,7 +57,10 @@ function MetricCard({ metricKey, data }: { metricKey: string; data: MetricBreakd
       <div className="metric-bar-track">
         <div
           className="metric-bar-fill"
-          style={{ width: `${data.score}%`, backgroundColor: scoreColor(data.score) }}
+          style={{
+            width: barReady ? `${data.score}%` : "0%",
+            backgroundColor: scoreColor(data.score),
+          }}
         />
       </div>
       {expanded && (
@@ -140,6 +164,21 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!result || loading) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timeout = window.setTimeout(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: reducedMotion ? "instant" : "smooth",
+        block: "start",
+      });
+    }, 80);
+
+    return () => window.clearTimeout(timeout);
+  }, [result, loading]);
 
   function handleUrlChange(value: string) {
     setUrl(value);
@@ -247,7 +286,7 @@ export default function AnalyzePage() {
 
       {/* ── Results ───────────────────────────────────────── */}
       {result && (
-        <div className="analyze-results">
+        <div className="analyze-results" ref={resultsRef} tabIndex={-1}>
           {/* Overall score */}
           <div className="dash-card overall-card">
             <div className="overall-left">
@@ -271,8 +310,8 @@ export default function AnalyzePage() {
               Score Breakdown
             </h2>
             <div className="metric-grid">
-              {Object.entries(result.scores.breakdown).map(([key, data]) => (
-                <MetricCard key={key} metricKey={key} data={data} />
+              {Object.entries(result.scores.breakdown).map(([key, data], index) => (
+                <MetricCard key={key} metricKey={key} data={data} index={index} />
               ))}
             </div>
           </div>
