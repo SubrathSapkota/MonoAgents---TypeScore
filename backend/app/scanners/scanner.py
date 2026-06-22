@@ -2,6 +2,9 @@
 scanner.py — HTTP-based website font & style scanner
 Fetches pages with requests, parses CSS files and inline styles with BeautifulSoup
 to extract font-family declarations. No browser required.
+
+Key feature: distinguishes PRIMARY fonts (first in a font-family stack, the
+intentional brand choice) from FALLBACK fonts (2nd+ position, safety nets).
 """
 
 import asyncio
@@ -49,23 +52,50 @@ def _is_valid_font_name(name: str) -> bool:
     return True
 
 
-def extract_fonts_from_css(css: str) -> list[str]:
-    fonts: set[str] = set()
+def _extract_font_stacks(css: str) -> list[list[str]]:
+    """
+    Extract all font-family stacks from CSS as ordered lists.
+    Each stack is [primary, fallback1, fallback2, ...].
+    """
+    stacks: list[list[str]] = []
 
-    # @font-face declarations
-    for m in FONT_FACE_NAME_RE.finditer(css):
-        name = _clean(m.group(1))
-        if _is_valid_font_name(name):
-            fonts.add(name)
-
-    # All font-family: ... declarations
     for m in FONT_FAMILY_RE.finditer(css):
+        stack = []
         for part in m.group(1).split(","):
             name = _clean(part)
             if _is_valid_font_name(name):
-                fonts.add(name)
+                stack.append(name)
+        if stack:
+            stacks.append(stack)
 
-    return sorted(fonts)
+    return stacks
+
+
+def extract_fonts_from_css(css: str) -> tuple[set[str], set[str]]:
+    """
+    Extract fonts from CSS. Returns (primary_fonts, fallback_fonts).
+    Primary = first font in each font-family stack or @font-face declarations.
+    Fallback = 2nd+ fonts in stacks.
+    """
+    primary: set[str] = set()
+    fallback: set[str] = set()
+
+    # @font-face declarations are always primary (intentionally loaded)
+    for m in FONT_FACE_NAME_RE.finditer(css):
+        name = _clean(m.group(1))
+        if _is_valid_font_name(name):
+            primary.add(name)
+
+    # font-family stacks: first = primary, rest = fallback
+    for stack in _extract_font_stacks(css):
+        primary.add(stack[0])
+        for fb in stack[1:]:
+            fallback.add(fb)
+
+    # A font declared in @font-face or as primary in any stack is primary
+    fallback -= primary
+
+    return primary, fallback
 
 
 def extract_google_fonts(html: str) -> list[str]:
@@ -89,15 +119,16 @@ def dedupe(lst: list) -> list:
 def extract_page_data(url: str, base_url: str) -> dict:
     html = fetch(url)
     if html is None:
-        return {"url": url, "error": "Failed to fetch", "fonts": [], "css_files": []}
+        return {"url": url, "error": "Failed to fetch", "fonts": [], "primary_fonts": [], "fallback_fonts": [], "css_files": []}
 
     soup = BeautifulSoup(html, "html.parser")
-    fonts: set[str] = set()
+    primary_fonts: set[str] = set()
+    fallback_fonts: set[str] = set()
     css_files: list[str] = []
 
-    # 1. Google Fonts families from <link> hrefs
+    # 1. Google Fonts families from <link> hrefs (always primary — explicitly loaded)
     for name in extract_google_fonts(html):
-        fonts.add(name)
+        primary_fonts.add(name)
 
     # 2. External CSS files
     for link_tag in soup.find_all("link", rel=lambda v: v and "stylesheet" in v):
@@ -107,31 +138,41 @@ def extract_page_data(url: str, base_url: str) -> dict:
         abs_href = urljoin(base_url, href)
         css_files.append(abs_href)
 
-        # Fetch and parse the CSS (skip huge or external font CDNs that add noise)
         css_text = fetch(abs_href)
         if css_text:
-            for name in extract_fonts_from_css(css_text):
-                fonts.add(name)
+            pri, fb = extract_fonts_from_css(css_text)
+            primary_fonts.update(pri)
+            fallback_fonts.update(fb)
 
     # 3. Inline <style> blocks
     for style_tag in soup.find_all("style"):
         css_text = style_tag.get_text()
-        for name in extract_fonts_from_css(css_text):
-            fonts.add(name)
+        pri, fb = extract_fonts_from_css(css_text)
+        primary_fonts.update(pri)
+        fallback_fonts.update(fb)
 
-    # 4. style= attributes on elements (quick grep)
+    # 4. style= attributes on elements
     inline_style_re = re.compile(r"font-family\s*:\s*([^;\"']+)", re.IGNORECASE)
     for tag in soup.find_all(style=True):
         style_val = tag.get("style", "")
         for m in inline_style_re.finditer(style_val):
-            for part in m.group(1).split(","):
-                name = _clean(part)
-                if _is_valid_font_name(name):
-                    fonts.add(name)
+            parts = [_clean(p) for p in m.group(1).split(",") if _is_valid_font_name(_clean(p))]
+            if parts:
+                primary_fonts.add(parts[0])
+                for fb in parts[1:]:
+                    fallback_fonts.add(fb)
+
+    # If a font is primary anywhere, it's not a fallback
+    fallback_fonts -= primary_fonts
+
+    # "fonts" includes all for backward compatibility
+    all_fonts = sorted(primary_fonts | fallback_fonts)
 
     return {
         "url": url,
-        "fonts": sorted(fonts),
+        "fonts": all_fonts,
+        "primary_fonts": sorted(primary_fonts),
+        "fallback_fonts": sorted(fallback_fonts),
         "css_files": css_files,
     }
 
@@ -192,7 +233,7 @@ async def scan_website(url: str) -> dict:
     {
       "base_url": "https://example.com",
       "pages": [
-        { "url": "...", "fonts": [...], "css_files": [...] },
+        { "url": "...", "fonts": [...], "primary_fonts": [...], "fallback_fonts": [...], "css_files": [...] },
         ...
       ]
     }
@@ -206,7 +247,7 @@ async def scan_website(url: str) -> dict:
         print(f"[scanner] Fetching homepage: {url}")
         html = fetch(url)
         if html is None:
-            return {"base_url": url, "pages": [{"url": url, "error": "Failed to fetch", "fonts": []}]}
+            return {"base_url": url, "pages": [{"url": url, "error": "Failed to fetch", "fonts": [], "primary_fonts": [], "fallback_fonts": []}]}
 
         # Collect internal links from homepage HTML
         all_links = collect_internal_links(html, url)
@@ -225,6 +266,8 @@ async def scan_website(url: str) -> dict:
                 "url": page_url,
                 "path": path,
                 "fonts": data.get("fonts", []),
+                "primary_fonts": data.get("primary_fonts", []),
+                "fallback_fonts": data.get("fallback_fonts", []),
                 "css_files": data.get("css_files", []),
                 **({"error": data["error"]} if "error" in data else {}),
             })

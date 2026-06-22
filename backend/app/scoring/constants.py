@@ -16,19 +16,37 @@ WEIGHTS: dict[str, float] = {
 # Fonts that are pre-installed on most operating systems.
 # Using only system fonts indicates no custom brand typography.
 SYSTEM_FONTS: set[str] = {
+    # Windows
     "arial", "helvetica", "times new roman", "times", "courier new",
     "courier", "verdana", "georgia", "palatino", "garamond", "comic sans ms",
     "trebuchet ms", "impact", "tahoma", "lucida console", "lucida sans",
+    "segoe ui", "segoe ui adjusted", "calibri", "cambria", "candara",
+    "consolas", "constantia", "corbel",
+    # macOS / iOS
+    "sf pro", "sf pro display", "sf pro text", "sf pro rounded",
+    "sf compact", "sf mono", "new york",
+    "helvetica neue", "avenir", "avenir next", "futura",
+    "gill sans", "optima", "baskerville", "didot", "menlo",
+    "geneva", "monaco", "apple color emoji",
+    # Linux / Android
+    "roboto", "noto sans", "noto serif", "droid sans", "droid serif",
+    "ubuntu", "cantarell", "dejavu sans", "dejavu serif",
+    "freesans", "freeserif", "liberation sans", "liberation serif",
+    "liberation mono", "oxygen", "open sans",
+    # Generic CSS families and keywords
     "system-ui", "serif", "sans-serif", "monospace", "cursive", "fantasy",
     "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded",
-    "-apple-system", "blinkmacsystemfont", "segoe ui", "segoe ui adjusted",
+    "-apple-system", "blinkmacsystemfont",
+    "inherit", "initial", "unset", "revert",
     # Normalized forms (after CamelCase split / hyphen removal)
     "blink mac system font", "sans serif", "system ui",
     "ui serif", "ui sans serif", "ui monospace", "ui rounded",
-    "apple system", "segoe ui adjusted",
-    "liberation sans", "liberation serif", "liberation mono",
-    # CSS keywords (not fonts)
-    "inherit", "initial", "unset", "revert",
+    "apple system", "apple color emoji",
+    "sf pro display", "sf pro text", "sf pro rounded",
+    "sf compact", "helvetica neue", "avenir next",
+    "gill sans", "dejavu sans", "dejavu serif",
+    "droid sans", "droid serif", "noto sans", "noto serif",
+    "open sans", "comic sans",
 }
 
 # ── Font normalization constants ──────────────────────────────────────────────

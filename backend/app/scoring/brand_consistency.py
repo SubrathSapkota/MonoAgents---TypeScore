@@ -700,6 +700,10 @@ def _normalize_scan_pages(
     """
     Normalize and classify all fonts per page.
 
+    Uses the scanner's primary/fallback distinction: only fonts that appear as
+    the FIRST font in a font-family stack (the intentional choice) are considered
+    brand fonts. Fonts that only appear in fallback positions are treated as system.
+
     Parameters
     ----------
     pages           : list of page dicts from scanner
@@ -714,6 +718,11 @@ def _normalize_scan_pages(
     all_brand_fonts: set[str] = set()
 
     for p in pages:
+        # Use primary_fonts if available (new scanner), fall back to all fonts
+        primary_set = set(f.lower().strip() for f in p.get("primary_fonts", []))
+        fallback_set = set(f.lower().strip() for f in p.get("fallback_fonts", []))
+        has_position_data = bool(primary_set or fallback_set)
+
         raw_fonts = p.get("fonts", [])
         page_families: dict[str, set[str]] = {
             "brand": set(), "code": set(), "icon": set(),
@@ -731,10 +740,13 @@ def _normalize_scan_pages(
                 page_families["system"].add(normalized or raw_lower)
                 continue
 
+            # If this font ONLY appears in fallback positions, treat as system
+            if has_position_data and raw_lower not in primary_set:
+                page_families["system"].add(normalized)
+                continue
+
             # Priority 1: Use unicode-range-based script detection from lighthouse
-            # This handles ANY font regardless of name (Mukta, Kanit, custom fonts, etc.)
             if raw_lower in script_map:
-                script_role = script_map[raw_lower]
                 page_families["script"].add(normalized)
                 all_normalized.add(normalized)
                 continue
