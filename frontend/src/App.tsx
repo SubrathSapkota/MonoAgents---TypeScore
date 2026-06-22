@@ -4,8 +4,6 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
-import LibraryPage from "./pages/LibraryPage";
-import FontDetailPage from "./pages/FontDetailPage";
 import AnalyzePage from "./pages/AnalyzePage";
 import HistoryPage from "./pages/HistoryPage";
 
@@ -37,14 +35,6 @@ export default function App() {
       <Route
         path="/dashboard"
         element={<PrivateRoute><DashboardPage /></PrivateRoute>}
-      />
-      <Route
-        path="/library"
-        element={<PrivateRoute><LibraryPage /></PrivateRoute>}
-      />
-      <Route
-        path="/library/:id"
-        element={<PrivateRoute><FontDetailPage /></PrivateRoute>}
       />
       <Route
         path="/analyze"

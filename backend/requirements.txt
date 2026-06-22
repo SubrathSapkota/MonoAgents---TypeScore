@@ -10,4 +10,5 @@ aiomysql
 python-jose[cryptography]
 python-multipart
 bcrypt
+openpyxl
 playwright

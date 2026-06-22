@@ -2,13 +2,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user_optional
 from app.db.database import get_db
-from app.db.models import ScanResult, User, UserFont
+from app.db.models import ScanResult, User
 from app.models.scan import ScanRequest, ScanResponse
 from app.scanners.scanner import scan_website
 from app.analyzer.lighthouse import analyze_url as lighthouse_analyze
@@ -80,24 +78,7 @@ async def analyze(
     except Exception as e:
         print(f"[analyze] Accessibility scan failed: {e}")
 
-    # Build the user's licensed font set for smarter license compliance
-    user_font_names: Optional[set] = None
-    if user:
-        result = await db.execute(
-            select(UserFont)
-            .options(selectinload(UserFont.catalog_font))
-            .where(UserFont.user_id == user.id)
-        )
-        user_fonts = result.scalars().all()
-        user_font_names = set()
-        for uf in user_fonts:
-            # Prefer catalog name, fall back to custom name
-            if uf.catalog_font:
-                user_font_names.add(uf.catalog_font.name.lower())
-            elif uf.custom_font_name:
-                user_font_names.add(uf.custom_font_name.lower())
-
-    scores = compute_scores(scan_result, lighthouse, a11y, user_font_names)
+    scores = compute_scores(scan_result, lighthouse, a11y)
 
     # Flatten all violations into a simple list for history storage
     all_issues = []
