@@ -55,3 +55,7 @@ test-results/
 # Misc
 *.bak
 *.tmp
+
+# Large local data files (use font_catalog.json in repo instead)
+backend/app/Sales_Inventory_Report_4.23.26.xlsx
+backend/app/~$Sales_Inventory_Report_4.23.26.xlsx

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { userFontsApi, historyApi } from "../api/client";
+import { historyApi } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import type { UserFont, ScanSummary } from "../api/types";
+import type { ScanSummary } from "../api/types";
 import { ScoreRing, scoreColor } from "../components/ScoreRing";
 
 function getGreeting() {
@@ -20,70 +20,19 @@ const METRIC_LABELS: Record<string, string> = {
   developer_experience: "Developer Experience",
 };
 
-const STAT_CARDS = [
-  {
-    key: "fonts",
-    label: "Fonts in Library",
-    icon: "Aa",
-    accent: "stat-card--indigo",
-    getValue: (fonts: UserFont[]) => fonts.length,
-    getMeta: (fonts: UserFont[]) =>
-      `${fonts.filter((f) => f.has_license_data).length} with license data`,
-  },
-  {
-    key: "scans",
-    label: "Scans Run",
-    icon: "⟳",
-    accent: "stat-card--violet",
-    getValue: (_fonts: UserFont[], scans: ScanSummary[]) =>
-      scans.length > 4 ? "5+" : scans.length,
-    getMeta: () => "recent analyses",
-  },
-  {
-    key: "score",
-    label: "Avg. TypeScore",
-    icon: "◈",
-    accent: "stat-card--emerald",
-    getValue: (_fonts: UserFont[], scans: ScanSummary[]) => {
-      if (scans.length === 0) return "—";
-      return Math.round(
-        scans.reduce((sum, s) => sum + (s.overall_score ?? 0), 0) / scans.length
-      );
-    },
-    getMeta: (_fonts: UserFont[], scans: ScanSummary[]) =>
-      scans.length ? "across all scans" : "no scans yet",
-    colorize: true,
-  },
-  {
-    key: "license",
-    label: "License Coverage",
-    icon: "✓",
-    accent: "stat-card--amber",
-    getValue: (fonts: UserFont[]) =>
-      fonts.length
-        ? Math.round(
-            (fonts.filter((f) => f.license_type).length / fonts.length) * 100
-          ) + "%"
-        : "—",
-    getMeta: () => "fonts with assigned license",
-  },
-] as const;
-
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [fonts, setFonts] = useState<UserFont[]>([]);
   const [scans, setScans] = useState<ScanSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      userFontsApi.list().catch(() => [] as UserFont[]),
-      historyApi.list({ limit: 5 }).catch(() => ({ items: [] as ScanSummary[], total: 0, limit: 5, offset: 0 })),
-    ]).then(([f, s]) => {
-      setFonts(f);
-      setScans(s.items);
-      setLoading(false);
-    });
+    historyApi
+      .list({ limit: 5 })
+      .then((s) => {
+        setScans(s.items);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const avgScore =
@@ -121,8 +70,8 @@ export default function DashboardPage() {
             <Link to="/analyze" className="btn btn-primary">
               Run Analysis
             </Link>
-            <Link to="/library" className="btn btn-secondary">
-              Manage Fonts
+            <Link to="/history" className="btn btn-secondary">
+              View History
             </Link>
           </div>
         </div>
@@ -136,29 +85,43 @@ export default function DashboardPage() {
 
       {/* ── Stat cards ──────────────────────────────────────── */}
       <div className="stat-grid">
-        {STAT_CARDS.map((card) => {
-          const value = card.getValue(fonts, scans);
-          const numericValue =
-            card.key === "score" && typeof value === "number" ? value : null;
+        <div className="stat-card stat-card--violet">
+          <div className="stat-card-top">
+            <span className="stat-label">Scans Run</span>
+            <span className="stat-icon">⟳</span>
+          </div>
+          <span className="stat-value">
+            {scans.length > 4 ? "5+" : scans.length}
+          </span>
+          <span className="stat-meta">recent analyses</span>
+        </div>
 
-          return (
-            <div key={card.key} className={`stat-card ${card.accent}`}>
-              <div className="stat-card-top">
-                <span className="stat-label">{card.label}</span>
-                <span className="stat-icon">{card.icon}</span>
-              </div>
-              <span
-                className="stat-value"
-                style={{
-                  color: numericValue ? scoreColor(numericValue) : undefined,
-                }}
-              >
-                {value}
-              </span>
-              <span className="stat-meta">{card.getMeta(fonts, scans)}</span>
-            </div>
-          );
-        })}
+        <div className="stat-card stat-card--emerald">
+          <div className="stat-card-top">
+            <span className="stat-label">Avg. TypeScore</span>
+            <span className="stat-icon">◈</span>
+          </div>
+          <span
+            className="stat-value"
+            style={{ color: avgScore ? scoreColor(avgScore) : undefined }}
+          >
+            {avgScore ?? "—"}
+          </span>
+          <span className="stat-meta">
+            {scans.length ? "across all scans" : "no scans yet"}
+          </span>
+        </div>
+
+        <div className="stat-card stat-card--amber">
+          <div className="stat-card-top">
+            <span className="stat-label">Issues Found</span>
+            <span className="stat-icon">⚠</span>
+          </div>
+          <span className="stat-value">
+            {scans.reduce((sum, s) => sum + s.issues_count, 0)}
+          </span>
+          <span className="stat-meta">across recent scans</span>
+        </div>
       </div>
 
       <div className="dashboard-grid">
@@ -235,51 +198,19 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── Font library preview ─────────────────────────── */}
+        {/* ── Quick actions ────────────────────────────────── */}
         <div className="dash-card">
           <div className="dash-card-header">
-            <h2 className="dash-card-title">My Fonts</h2>
-            <Link to="/library" className="dash-card-link">
-              Manage library
+            <h2 className="dash-card-title">Quick Actions</h2>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Link to="/analyze" className="btn btn-primary btn-full">
+              Analyze a Website
+            </Link>
+            <Link to="/history" className="btn btn-secondary btn-full">
+              Browse Scan History
             </Link>
           </div>
-
-          {fonts.length > 0 ? (
-            <ul className="font-preview-list">
-              {fonts.slice(0, 6).map((f) => (
-                <li key={f.id} className="font-preview-item">
-                  <div className="font-preview-name">{f.font_name}</div>
-                  <div className="font-preview-meta">
-                    {f.category && (
-                      <span className="badge badge-cat">{f.category}</span>
-                    )}
-                    {f.license_type && (
-                      <span className="badge badge-lic">{f.license_type}</span>
-                    )}
-                    {!f.has_license_data && (
-                      <span className="badge badge-warn">No license data</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-              {fonts.length > 6 && (
-                <li className="font-preview-more">
-                  +{fonts.length - 6} more fonts
-                </li>
-              )}
-            </ul>
-          ) : (
-            <div className="dash-empty">
-              <div className="dash-empty-icon">Aa</div>
-              <p>No fonts in your library.</p>
-              <p className="dash-empty-hint">
-                Add fonts from the catalog or upload your own.
-              </p>
-              <Link to="/library" className="btn btn-secondary" style={{ marginTop: 16 }}>
-                Add fonts
-              </Link>
-            </div>
-          )}
         </div>
       </div>
 

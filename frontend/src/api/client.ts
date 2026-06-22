@@ -44,40 +44,6 @@ export const authApi = {
     request<import("./types").AuthResponse>("POST", "/auth/login", { email, password }),
 };
 
-// ── Font catalog ──────────────────────────────────────────────────────────────
-
-export const fontsApi = {
-  list: (q?: string, category?: string) => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (category) params.set("category", category);
-    const qs = params.toString();
-    return request<import("./types").FontSummary[]>("GET", `/fonts${qs ? `?${qs}` : ""}`);
-  },
-  get: (id: number) => request<import("./types").FontDetail>("GET", `/fonts/${id}`),
-};
-
-// ── User font library ─────────────────────────────────────────────────────────
-
-export const userFontsApi = {
-  list: () => request<import("./types").UserFont[]>("GET", "/user/fonts"),
-  get: (id: number) => request<import("./types").UserFontDetail>("GET", `/user/fonts/${id}`),
-  add: (payload: { font_name?: string; font_id?: number; license_type?: string }) =>
-    request<import("./types").UserFont>("POST", "/user/fonts", payload),
-  uploadFolder: (files: FileList, licenseType?: string) => {
-    const form = new FormData();
-    Array.from(files).forEach((f) => form.append("files", f));
-    if (licenseType) form.append("license_type", licenseType);
-    return request<{ added: string[]; skipped: string[]; count: number }>(
-      "POST",
-      "/user/fonts/upload-folder",
-      form,
-      true
-    );
-  },
-  remove: (id: number) => request<void>("DELETE", `/user/fonts/${id}`),
-};
-
 // ── Scan ──────────────────────────────────────────────────────────────────────
 
 export const scanApi = {

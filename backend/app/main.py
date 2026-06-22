@@ -4,9 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.scan import router as scan_router
-from app.api import auth, fonts, user_fonts, history
+from app.api import auth, history
 from app.db.database import engine, Base, AsyncSessionLocal
 from app.db.seed import seed_fonts
+from app.scoring.font_catalog import warm_cache
 
 
 @asynccontextmanager
@@ -17,6 +18,8 @@ async def lifespan(app: FastAPI):
     # Seed font catalog
     async with AsyncSessionLocal() as session:
         await seed_fonts(session)
+    # Pre-load Monotype font catalog into memory for fast license lookups
+    warm_cache()
     yield
 
 
@@ -30,7 +33,5 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(fonts.router, prefix="/fonts", tags=["fonts"])
-app.include_router(user_fonts.router, prefix="/user/fonts", tags=["user-fonts"])
 app.include_router(history.router, prefix="/history", tags=["history"])
 app.include_router(scan_router, tags=["scan"])

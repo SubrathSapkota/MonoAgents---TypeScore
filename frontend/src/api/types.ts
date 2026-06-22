@@ -12,65 +12,6 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
-// ── Font catalog ──────────────────────────────────────────────────────────────
-
-export type LicenseType = "desktop" | "webfont" | "app" | "edoc" | "digital_ad";
-
-export const LICENSE_LABELS: Record<LicenseType, string> = {
-  desktop: "Desktop",
-  webfont: "Webfont",
-  app: "App",
-  edoc: "Electronic Doc",
-  digital_ad: "Digital Ad",
-};
-
-export interface LicenseItem {
-  name: string;
-  description: string;
-  link?: string;
-}
-
-export interface FontLicense {
-  id: number;
-  license_type: LicenseType;
-  can_use: LicenseItem[];
-  cannot_use: LicenseItem[];
-  description?: string;
-  eula_url?: string;
-}
-
-export interface FontSummary {
-  id: number;
-  name: string;
-  foundry?: string;
-  category?: string;
-  description?: string;
-  license_types: LicenseType[];
-}
-
-export interface FontDetail extends FontSummary {
-  licenses: FontLicense[];
-}
-
-// ── User font library ─────────────────────────────────────────────────────────
-
-export interface UserFont {
-  id: number;
-  font_name: string;
-  foundry?: string;
-  category?: string;
-  license_type?: LicenseType;
-  source: "catalog" | "upload" | "manual";
-  catalog_id?: number;
-  has_license_data: boolean;
-  added_at: string;
-}
-
-export interface UserFontDetail extends UserFont {
-  description?: string;
-  licenses: FontLicense[];
-}
-
 // ── Scan / Analysis ───────────────────────────────────────────────────────────
 
 export interface PageResult {
