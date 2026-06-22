@@ -14,6 +14,15 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+# Check which content encodings we can actually handle
+_SUPPORTED_ENCODINGS = "gzip, deflate"
+try:
+    import brotli  # noqa: F401
+    _SUPPORTED_ENCODINGS += ", br"
+except ImportError:
+    pass
+
+
 # ─── Session setup ─────────────────────────────────────────────────────────────
 
 def _make_session() -> requests.Session:
@@ -40,7 +49,7 @@ def _make_session() -> requests.Session:
             "q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
         ),
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": _SUPPORTED_ENCODINGS,
         "Connection": "keep-alive",
         "Cache-Control": "no-cache",
         "Pragma": "no-cache",
@@ -67,7 +76,12 @@ def fetch(url: str, timeout: int = 20) -> Optional[str]:
     try:
         resp = _SESSION.get(url, timeout=timeout, allow_redirects=True)
         resp.raise_for_status()
-        return resp.text
+        text = resp.text
+        # Safety: detect garbled/undecoded content (binary responses returned as text)
+        if text and len(text) > 100 and text[:100].count("\x00") > 5:
+            print(f"[http_client] Response appears binary/undecoded for {url}")
+            return None
+        return text
     except Exception as e:
         print(f"[http_client] Failed to fetch {url}: {e}")
         return None

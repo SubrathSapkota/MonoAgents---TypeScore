@@ -21,7 +21,14 @@ SYSTEM_FONTS: set[str] = {
     "trebuchet ms", "impact", "tahoma", "lucida console", "lucida sans",
     "system-ui", "serif", "sans-serif", "monospace", "cursive", "fantasy",
     "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded",
-    "-apple-system", "blinkmacsystemfont", "segoe ui",
+    "-apple-system", "blinkmacsystemfont", "segoe ui", "segoe ui adjusted",
+    # Normalized forms (after CamelCase split / hyphen removal)
+    "blink mac system font", "sans serif", "system ui",
+    "ui serif", "ui sans serif", "ui monospace", "ui rounded",
+    "apple system", "segoe ui adjusted",
+    "liberation sans", "liberation serif", "liberation mono",
+    # CSS keywords (not fonts)
+    "inherit", "initial", "unset", "revert",
 }
 
 # ── Font normalization constants ──────────────────────────────────────────────
@@ -95,26 +102,64 @@ ICON_FONT_MARKERS: set[str] = {
 }
 
 CJK_FONT_MARKERS: set[str] = {
-    "hei", "song", "ming", "kai", "fang", "xianghe",
-    "noto sans cjk", "noto serif cjk", "noto sans sc", "noto sans tc",
-    "noto sans jp", "noto sans kr", "noto serif sc", "noto serif jp",
-    "source han", "pingfang", "hiragino", "yu gothic", "yu mincho",
-    "microsoft yahei", "meiryo", "malgun", "simsun", "simhei",
-    "ms gothic", "ms mincho", "apple sd gothic", "apple myungjo",
-    "nanum", "wenquanyi", "droid sans japanese", "droid sans fallback",
-    "sarasa", "lxgw", "oppo sans", "dotum", "gulim", "batang", "myeongjo",
+    # Script identifiers only — NOT individual font names
+    "cjk", "chinese", "japanese", "korean",
+    "hangul", "hiragana", "katakana", "kanji",
+    # Generic descriptors strongly associated with CJK typographic traditions
+    "hei", "song", "ming", "fang",
+    "mincho", "myeongjo",
 }
 
 ARABIC_FONT_MARKERS: set[str] = {
-    "naskh", "kufi", "thuluth", "nastaliq", "ruqah", "arabic",
-    "noto sans arabic", "noto kufi", "geeza", "al bayan",
-    "baghdad", "decotype", "diwan", "farah",
+    # Script identifiers only
+    "arabic", "naskh", "kufi", "thuluth", "nastaliq", "ruqah",
+    "hebrew", "urdu", "farsi", "persian",
 }
 
 INDIC_FONT_MARKERS: set[str] = {
+    # Script names — these identify the SCRIPT, not specific font products
     "devanagari", "bengali", "tamil", "telugu", "kannada",
-    "gujarati", "gurmukhi", "malayalam", "oriya", "sinhala",
-    "tibetan", "thai", "lao", "khmer", "myanmar", "noto sans",
+    "gujarati", "gurmukhi", "malayalam", "oriya", "odia",
+    "sinhala", "tibetan", "thai", "lao", "khmer", "myanmar",
+    "nepali", "hindi", "marathi", "sanskrit",
+}
+
+# Unicode range blocks for script detection (from @font-face unicode-range)
+# Used by lighthouse.py to classify fonts by their character coverage.
+SCRIPT_UNICODE_RANGES: dict[str, list[tuple[int, int]]] = {
+    "cjk": [
+        (0x4E00, 0x9FFF),    # CJK Unified Ideographs
+        (0x3040, 0x309F),    # Hiragana
+        (0x30A0, 0x30FF),    # Katakana
+        (0xAC00, 0xD7AF),    # Hangul Syllables
+        (0x3400, 0x4DBF),    # CJK Extension A
+        (0xF900, 0xFAFF),    # CJK Compatibility Ideographs
+        (0x2E80, 0x2EFF),    # CJK Radicals Supplement
+    ],
+    "indic": [
+        (0x0900, 0x097F),    # Devanagari
+        (0x0980, 0x09FF),    # Bengali
+        (0x0A00, 0x0A7F),    # Gurmukhi
+        (0x0A80, 0x0AFF),    # Gujarati
+        (0x0B00, 0x0B7F),    # Oriya
+        (0x0B80, 0x0BFF),    # Tamil
+        (0x0C00, 0x0C7F),    # Telugu
+        (0x0C80, 0x0CFF),    # Kannada
+        (0x0D00, 0x0D7F),    # Malayalam
+        (0x0D80, 0x0DFF),    # Sinhala
+        (0x0E00, 0x0E7F),    # Thai
+        (0x0E80, 0x0EFF),    # Lao
+        (0x0F00, 0x0FFF),    # Tibetan
+        (0x1000, 0x109F),    # Myanmar
+        (0x1780, 0x17FF),    # Khmer
+    ],
+    "arabic": [
+        (0x0600, 0x06FF),    # Arabic
+        (0x0750, 0x077F),    # Arabic Supplement
+        (0x0590, 0x05FF),    # Hebrew
+        (0xFB50, 0xFDFF),    # Arabic Presentation Forms-A
+        (0xFE70, 0xFEFF),    # Arabic Presentation Forms-B
+    ],
 }
 
 # Rogue fonts: system fonts that indicate lack of brand typography

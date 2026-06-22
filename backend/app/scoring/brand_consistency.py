@@ -117,8 +117,17 @@ _NORMALIZED_SYSTEM_VARIANTS = {
 }
 
 
-def classify_font_role(normalized_name: str) -> str:
-    """Classify a normalized font name into a role."""
+def classify_font_role(normalized_name: str, raw_name: str = "") -> str:
+    """
+    Classify a normalized font name into a role.
+
+    Parameters
+    ----------
+    normalized_name : the result of normalize_font_family()
+    raw_name        : optional original name before normalization, used to detect
+                      script-specific fonts whose locale suffixes got stripped
+                      (e.g., "NotoSansJP" → normalized "noto sans" but raw reveals JP)
+    """
     lower = normalized_name.lower()
 
     if lower in SYSTEM_FONTS or lower in ROGUE_SYSTEM_FONTS:
@@ -126,21 +135,44 @@ def classify_font_role(normalized_name: str) -> str:
     if lower in _NORMALIZED_SYSTEM_VARIANTS:
         return FontRole.SYSTEM
 
+    # Check raw name for locale/script indicators that normalization stripped
+    raw_lower = raw_name.lower().replace("-", " ").replace("_", " ") if raw_name else ""
+    combined = f"{lower} {raw_lower}"
+
     for marker in CODE_FONT_MARKERS:
-        if marker in lower:
+        if marker in combined:
             return FontRole.CODE
     for marker in ICON_FONT_MARKERS:
-        if marker in lower:
+        if marker in combined:
             return FontRole.ICON
     for marker in CJK_FONT_MARKERS:
-        if marker in lower:
+        if marker in combined:
             return FontRole.CJK
     for marker in ARABIC_FONT_MARKERS:
-        if marker in lower:
+        if marker in combined:
             return FontRole.ARABIC
     for marker in INDIC_FONT_MARKERS:
-        if marker in lower:
+        if marker in combined:
             return FontRole.INDIC
+
+    # Detect CJK/script fonts by locale suffix in raw name
+    # Apply CamelCase split to raw name to catch "NotoSansJP" → "noto sans jp"
+    if raw_lower:
+        raw_split = _CAMEL_SPLIT_RE.sub(" ", raw_name).lower() if raw_name else raw_lower
+        raw_split = raw_split.replace("-", " ").replace("_", " ")
+        _CJK_LOCALE_CODES = {"jp", "kr", "sc", "tc", "hk", "cn", "tw"}
+        _ARABIC_LOCALE_CODES = {"ar", "he", "ur", "fa"}
+        _INDIC_LOCALE_CODES = {
+            "th", "ne", "hi", "bn", "ta", "te", "kn", "ml",
+            "gu", "pa", "si", "my", "km", "lo",
+        }
+        for token in raw_split.split():
+            if token in _CJK_LOCALE_CODES:
+                return FontRole.CJK
+            if token in _ARABIC_LOCALE_CODES:
+                return FontRole.ARABIC
+            if token in _INDIC_LOCALE_CODES:
+                return FontRole.INDIC
 
     return FontRole.BRAND
 
@@ -661,11 +693,22 @@ def _score_stability_http(page_font_data: list[dict]) -> tuple[float, list[str]]
 # SCAN DATA NORMALIZATION (shared between pillars)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _normalize_scan_pages(pages: list[dict]) -> tuple[list[dict], set[str], set[str]]:
+def _normalize_scan_pages(
+    pages: list[dict],
+    font_script_map: dict[str, str] | None = None,
+) -> tuple[list[dict], set[str], set[str]]:
     """
     Normalize and classify all fonts per page.
+
+    Parameters
+    ----------
+    pages           : list of page dicts from scanner
+    font_script_map : optional {family_lower: "cjk"|"indic"|"arabic"} from lighthouse
+                      unicode-range detection (preferred over name-based heuristics)
+
     Returns (page_font_data, all_normalized, all_brand_fonts).
     """
+    script_map = font_script_map or {}
     page_font_data: list[dict[str, set[str]]] = []
     all_normalized: set[str] = set()
     all_brand_fonts: set[str] = set()
@@ -688,7 +731,20 @@ def _normalize_scan_pages(pages: list[dict]) -> tuple[list[dict], set[str], set[
                 page_families["system"].add(normalized or raw_lower)
                 continue
 
-            role = classify_font_role(normalized)
+            # Priority 1: Use unicode-range-based script detection from lighthouse
+            # This handles ANY font regardless of name (Mukta, Kanit, custom fonts, etc.)
+            if raw_lower in script_map:
+                script_role = script_map[raw_lower]
+                page_families["script"].add(normalized)
+                all_normalized.add(normalized)
+                continue
+            if normalized in script_map:
+                page_families["script"].add(normalized)
+                all_normalized.add(normalized)
+                continue
+
+            # Priority 2: Name-based classification (script keywords + locale codes)
+            role = classify_font_role(normalized, raw)
             all_normalized.add(normalized)
 
             if role == FontRole.BRAND:
@@ -720,7 +776,11 @@ _PILLAR_WEIGHTS = {
 }
 
 
-def compute(scan: dict, approved_fonts: set | None = None) -> tuple[float, list[str]]:
+def compute(
+    scan: dict,
+    approved_fonts: set | None = None,
+    lighthouse: dict | None = None,
+) -> tuple[float, list[str]]:
     """
     Returns (score: float 0-100, violations: list[str]).
 
@@ -735,6 +795,8 @@ def compute(scan: dict, approved_fonts: set | None = None) -> tuple[float, list[
                      "fingerprints" from app.extractor.extract_site()
     approved_fonts : optional set of lowercase font names the user has approved
                      as their brand palette (from user font library)
+    lighthouse     : optional dict from lighthouse analyzer — contains
+                     "font_script_map" for unicode-range-based script classification
     """
     pages = scan.get("pages", [])
     if not pages:
@@ -745,8 +807,13 @@ def compute(scan: dict, approved_fonts: set | None = None) -> tuple[float, list[
         fingerprints and isinstance(fingerprints, list) and len(fingerprints) > 0
     )
 
+    # Extract unicode-range-based script map from lighthouse (if available)
+    font_script_map = (lighthouse or {}).get("font_script_map")
+
     # Normalize HTTP scan data (always needed for Governance)
-    page_font_data, all_normalized, all_brand_fonts = _normalize_scan_pages(pages)
+    page_font_data, all_normalized, all_brand_fonts = _normalize_scan_pages(
+        pages, font_script_map=font_script_map
+    )
 
     if not all_normalized:
         return 15.0, [

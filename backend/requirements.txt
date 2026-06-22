@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 pydantic
 requests
+brotli
 beautifulsoup4
 sqlalchemy[asyncio]
 asyncpg

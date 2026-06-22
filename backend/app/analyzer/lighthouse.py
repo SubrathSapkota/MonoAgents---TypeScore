@@ -14,6 +14,50 @@ from bs4 import BeautifulSoup
 from app.utils.http_client import fetch, fetch_with_timing
 from app.utils.http_client import _SESSION as _HTTP_SESSION  # shared session for HEAD requests
 
+from app.scoring.constants import SCRIPT_UNICODE_RANGES
+
+
+def _parse_unicode_range_value(range_str: str) -> list[tuple[int, int]]:
+    """Parse a CSS unicode-range value into a list of (start, end) codepoint tuples."""
+    ranges = []
+    for part in range_str.split(","):
+        part = part.strip().lower()
+        if not part.startswith("u+"):
+            continue
+        part = part[2:]  # strip "u+"
+        # Handle wildcards like u+00?? → u+0000-u+00FF
+        if "?" in part:
+            start = int(part.replace("?", "0"), 16)
+            end = int(part.replace("?", "f"), 16)
+            ranges.append((start, end))
+        elif "-" in part:
+            s, e = part.split("-", 1)
+            e = e.lstrip("u+")
+            ranges.append((int(s, 16), int(e, 16)))
+        else:
+            val = int(part, 16)
+            ranges.append((val, val))
+    return ranges
+
+
+def _detect_script_from_unicode_range(unicode_range_css: str) -> str | None:
+    """
+    Detect if a unicode-range covers a non-Latin script block.
+    Returns 'cjk', 'indic', 'arabic', or None (Latin/unknown).
+    """
+    parsed = _parse_unicode_range_value(unicode_range_css)
+    if not parsed:
+        return None
+
+    for script_name, blocks in SCRIPT_UNICODE_RANGES.items():
+        for block_start, block_end in blocks:
+            for range_start, range_end in parsed:
+                # Check if any part of this unicode-range overlaps with the script block
+                if range_start <= block_end and range_end >= block_start:
+                    return script_name
+
+    return None
+
 
 # Matches any url(...) value in CSS that ends with a font file extension.
 # Handles quoted/unquoted, absolute and relative paths, and query strings.
@@ -287,14 +331,19 @@ async def analyze_url(url: str) -> dict:
 
     # Compute distinct font variants (family + weight + style) to detect subsetting.
     # When unicode-range is used, many @font-face blocks map to fewer logical variants.
+    # Also detect font scripts from unicode-range for multilingual classification.
     font_face_blocks = re.findall(
         r"@font-face\s*\{([^}]+)\}", all_css, re.IGNORECASE | re.DOTALL
     )
     seen_variants: set[tuple[str, str, str]] = set()
     uses_unicode_range = False
+    font_script_map: dict[str, str] = {}  # family -> detected script role
+
     for block in font_face_blocks:
-        if re.search(r"unicode-range", block, re.IGNORECASE):
+        unicode_range_m = re.search(r"unicode-range\s*:\s*([^;]+)", block, re.IGNORECASE)
+        if unicode_range_m:
             uses_unicode_range = True
+
         family_m = re.search(r"font-family\s*:\s*([^;]+)", block, re.IGNORECASE)
         weight_m = re.search(r"font-weight\s*:\s*([^;]+)", block, re.IGNORECASE)
         style_m = re.search(r"font-style\s*:\s*([^;]+)", block, re.IGNORECASE)
@@ -303,6 +352,13 @@ async def analyze_url(url: str) -> dict:
         style = (style_m.group(1).strip().lower() if style_m else "normal")
         if family:
             seen_variants.add((family, weight, style))
+
+        # Detect script from unicode-range
+        if unicode_range_m and family and family not in font_script_map:
+            detected = _detect_script_from_unicode_range(unicode_range_m.group(1))
+            if detected:
+                font_script_map[family] = detected
+
     font_variant_count = len(seen_variants)
     font_family_count = len({family for family, _, _ in seen_variants})
 
@@ -361,6 +417,7 @@ async def analyze_url(url: str) -> dict:
         "font_variant_count": font_variant_count,
         "font_family_count": font_family_count,
         "uses_unicode_range": uses_unicode_range,
+        "font_script_map": font_script_map,  # {family: "cjk"|"indic"|"arabic"}
         "google_fonts_no_swap": google_fonts and not gfonts_display_swap,
         "render_blocking_count": render_blocking,
         "large_font_files": large_font_files,
