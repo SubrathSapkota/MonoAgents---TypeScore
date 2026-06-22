@@ -78,10 +78,10 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([
       userFontsApi.list().catch(() => [] as UserFont[]),
-      historyApi.list(5).catch(() => [] as ScanSummary[]),
+      historyApi.list({ limit: 5 }).catch(() => ({ items: [] as ScanSummary[], total: 0, limit: 5, offset: 0 })),
     ]).then(([f, s]) => {
       setFonts(f);
-      setScans(s);
+      setScans(s.items);
       setLoading(false);
     });
   }, []);

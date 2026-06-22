@@ -30,9 +30,23 @@ FONT_FACE_NAME_RE = re.compile(
 # Matches Google Fonts family= param: ?family=Inter|Roboto:wght@400
 GFONTS_RE = re.compile(r"family=([^&\"'>\s]+)", re.IGNORECASE)
 
+# CSS functions and other non-font tokens (e.g. var(--fontFamily))
+_INVALID_FONT_PATTERN = re.compile(
+    r"[(){}/#]|^[\d\-]|^var\b|^calc\b|^env\b|^attr\b",
+    re.IGNORECASE,
+)
+
 
 def _clean(name: str) -> str:
     return name.strip().strip('"').strip("'").strip()
+
+
+def _is_valid_font_name(name: str) -> bool:
+    if not name:
+        return False
+    if _INVALID_FONT_PATTERN.search(name):
+        return False
+    return True
 
 
 def extract_fonts_from_css(css: str) -> list[str]:
@@ -41,19 +55,14 @@ def extract_fonts_from_css(css: str) -> list[str]:
     # @font-face declarations
     for m in FONT_FACE_NAME_RE.finditer(css):
         name = _clean(m.group(1))
-        if name:
+        if _is_valid_font_name(name):
             fonts.add(name)
 
     # All font-family: ... declarations
     for m in FONT_FAMILY_RE.finditer(css):
         for part in m.group(1).split(","):
             name = _clean(part)
-            # Skip generic families
-            if name and name.lower() not in {
-                "serif", "sans-serif", "monospace", "cursive",
-                "fantasy", "system-ui", "inherit", "initial",
-                "unset", "-apple-system", "blinkmacsystemfont",
-            }:
+            if _is_valid_font_name(name):
                 fonts.add(name)
 
     return sorted(fonts)
@@ -65,7 +74,7 @@ def extract_google_fonts(html: str) -> list[str]:
     for m in GFONTS_RE.finditer(html):
         for family in m.group(1).split("|"):
             name = _clean(family.split(":")[0].replace("+", " "))
-            if name:
+            if _is_valid_font_name(name):
                 fonts.add(name)
     return sorted(fonts)
 
@@ -117,10 +126,7 @@ def extract_page_data(url: str, base_url: str) -> dict:
         for m in inline_style_re.finditer(style_val):
             for part in m.group(1).split(","):
                 name = _clean(part)
-                if name and name.lower() not in {
-                    "serif", "sans-serif", "monospace", "cursive",
-                    "fantasy", "system-ui", "inherit", "initial", "unset",
-                }:
+                if _is_valid_font_name(name):
                     fonts.add(name)
 
     return {

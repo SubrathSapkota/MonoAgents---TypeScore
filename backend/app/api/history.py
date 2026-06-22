@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -12,6 +12,22 @@ from app.db.database import get_db
 from app.db.models import ScanResult, User
 
 router = APIRouter()
+
+
+def _history_filters(
+    user_id: int,
+    url: Optional[str] = None,
+    min_score: Optional[float] = None,
+    max_score: Optional[float] = None,
+):
+    conditions = [ScanResult.user_id == user_id]
+    if url and url.strip():
+        conditions.append(ScanResult.url.ilike(f"%{url.strip()}%"))
+    if min_score is not None:
+        conditions.append(ScanResult.overall_score >= min_score)
+    if max_score is not None:
+        conditions.append(ScanResult.overall_score <= max_score)
+    return conditions
 
 
 class ScoreBreakdownSchema(BaseModel):
@@ -36,22 +52,47 @@ class ScanDetailSchema(ScanSummarySchema):
     raw_data: dict
 
 
-@router.get("", response_model=List[ScanSummarySchema])
+class PaginatedHistorySchema(BaseModel):
+    items: List[ScanSummarySchema]
+    total: int
+    limit: int
+    offset: int
+
+
+@router.get("", response_model=PaginatedHistorySchema)
 async def list_history(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    url: Optional[str] = Query(None, max_length=200),
+    min_score: Optional[float] = Query(None, ge=0, le=100),
+    max_score: Optional[float] = Query(None, ge=0, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if min_score is not None and max_score is not None and min_score > max_score:
+        raise HTTPException(status_code=400, detail="min_score cannot exceed max_score")
+
+    conditions = _history_filters(user.id, url, min_score, max_score)
+
+    total_result = await db.execute(
+        select(func.count()).select_from(ScanResult).where(*conditions)
+    )
+    total = total_result.scalar_one()
+
     result = await db.execute(
         select(ScanResult)
-        .where(ScanResult.user_id == user.id)
+        .where(*conditions)
         .order_by(ScanResult.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
     scans = result.scalars().all()
-    return [_to_summary(s) for s in scans]
+    return PaginatedHistorySchema(
+        items=[_to_summary(s) for s in scans],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{scan_id}", response_model=ScanDetailSchema)

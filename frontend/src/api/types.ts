@@ -142,3 +142,18 @@ export interface ScanDetail extends ScanSummary {
   issues: { metric: string; message: string }[];
   raw_data: Record<string, unknown>;
 }
+
+export interface PaginatedScans {
+  items: ScanSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface HistoryListParams {
+  limit?: number;
+  offset?: number;
+  url?: string;
+  min_score?: number;
+  max_score?: number;
+}

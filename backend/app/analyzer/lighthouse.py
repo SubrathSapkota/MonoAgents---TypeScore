@@ -85,6 +85,96 @@ def check_font_file_sizes(css: str, base_url: str, limit: int = 5) -> list[dict]
     return results
 
 
+async def _get_cwv_browser(url: str) -> dict:
+    """
+    Launch a headless Chromium browser via Playwright, navigate to the URL,
+    and collect real LCP and CLS values using the browser's native
+    Performance Observer API.
+
+    Returns {"lcp_ms": int, "cls": float} on success, or
+            {"lcp_ms": None, "cls": None} on any failure (import error,
+            network block, timeout, Cloudflare, etc.).
+
+    Timeout budget: 15 s for page navigation + 2 s layout-shift settle +
+    1 s observer flush = ~18 s worst-case per call.
+    """
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        print("[cwv] playwright not installed — run: playwright install chromium")
+        return {"lcp_ms": None, "cls": None}
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent=(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+            )
+            page = await context.new_page()
+
+            try:
+                await page.goto(url, wait_until="networkidle", timeout=15_000)
+            except Exception:
+                # networkidle timed out — page still loaded enough for CWV
+                pass
+
+            # Wait for layout shifts to settle after initial load
+            await page.wait_for_timeout(2_000)
+
+            # Read LCP and CLS from the browser's Performance Observer API.
+            # PerformanceObserver with buffered:true replays entries that
+            # already happened before the observer was registered.
+            cwv: dict = await page.evaluate("""
+                () => new Promise(resolve => {
+                    const result = { lcp_ms: null, cls: 0.0 };
+
+                    try {
+                        new PerformanceObserver(list => {
+                            const entries = list.getEntries();
+                            if (entries.length) {
+                                // Last entry is always the latest LCP candidate
+                                result.lcp_ms = entries[entries.length - 1].startTime;
+                            }
+                        }).observe({ type: 'largest-contentful-paint', buffered: true });
+                    } catch(e) {}
+
+                    try {
+                        new PerformanceObserver(list => {
+                            for (const entry of list.getEntries()) {
+                                // Only unexpected shifts count toward CLS
+                                if (!entry.hadRecentInput) {
+                                    result.cls += entry.value;
+                                }
+                            }
+                        }).observe({ type: 'layout-shift', buffered: true });
+                    } catch(e) {}
+
+                    // Give observers 1 s to flush buffered entries
+                    setTimeout(() => resolve(result), 1_000);
+                })
+            """)
+
+            await browser.close()
+
+            lcp = cwv.get("lcp_ms")
+            cls = cwv.get("cls", 0.0)
+            print(f"[cwv] Browser — LCP={lcp} ms, CLS={round(cls, 3)}")
+
+            return {
+                "lcp_ms": round(lcp) if lcp else None,
+                "cls": round(float(cls), 3) if cls is not None else None,
+            }
+
+    except Exception as e:
+        print(f"[cwv] Browser measurement failed: {e}")
+        return {"lcp_ms": None, "cls": None}
+
+
 def estimate_performance_score(
     response_ms: float,
     html_bytes: int,
@@ -107,42 +197,6 @@ def estimate_performance_score(
     """
     score = 100
     breakdown: dict[str, int] = {}
-
-    # Response time penalty (threshold 800 ms to account for geographic latency)
-    if response_ms > 3000:
-        p = 30
-    elif response_ms > 2000:
-        p = 20
-    elif response_ms > 1000:
-        p = 10
-    elif response_ms > 800:
-        p = 5
-    else:
-        p = 0
-    score -= p
-    breakdown["response_time_penalty"] = p
-
-    # HTML size penalty
-    if html_bytes > 500_000:
-        p = 15
-    elif html_bytes > 200_000:
-        p = 10
-    elif html_bytes > 100_000:
-        p = 5
-    else:
-        p = 0
-    score -= p
-    breakdown["html_size_penalty"] = p
-
-    # CSS file count penalty (threshold 10 — code-split apps commonly have 6-10)
-    if css_count > 15:
-        p = 10
-    elif css_count > 10:
-        p = 5
-    else:
-        p = 0
-    score -= p
-    breakdown["css_count_penalty"] = p
 
     # Google Fonts loaded without display=swap (request-level blocking issue)
     p = 5 if google_fonts else 0
@@ -279,17 +333,26 @@ async def analyze_url(url: str) -> dict:
     base_breakdown["html_kb"] = round(html_bytes / 1024)
     base_breakdown["css_count"] = css_count
 
-    # Estimate LCP from response time (rough proxy)
+    # Estimate LCP from response time — used as fallback if browser run fails
     estimated_lcp_ms = round(response_ms * 1.5 + 300)
 
+    # Real LCP + CLS from a headless browser (Playwright).
+    # Falls back to the HTTP estimate for LCP and None for CLS if the browser
+    # run fails (Cloudflare block, timeout, playwright not installed, etc.)
+    print(f"[lighthouse] Launching browser for real CWV measurement …")
+    cwv = await _get_cwv_browser(url)
+    lcp_ms = cwv["lcp_ms"] if cwv["lcp_ms"] else estimated_lcp_ms
+    cls_val = cwv["cls"]  # None if browser failed — CLS deduction stays dormant
+
     print(f"[lighthouse] Done — performance={perf_score}, "
-          f"estimated_lcp={estimated_lcp_ms}ms, "
+          f"lcp={lcp_ms}ms ({'browser' if cwv['lcp_ms'] else 'estimated'}), "
+          f"cls={cls_val}, "
           f"font warnings={len(font_warnings)}")
 
     return {
         "performance": perf_score,
-        "lcp_ms": estimated_lcp_ms,
-        "cls": None,  # Not measurable without a real browser
+        "lcp_ms": lcp_ms,
+        "cls": cls_val,
         "font_warnings": font_warnings,
         # Raw signals consumed by scoring/performance.py for explicit deductions
         "font_display_ok": font_display_ok,
@@ -300,8 +363,8 @@ async def analyze_url(url: str) -> dict:
         "uses_unicode_range": uses_unicode_range,
         "google_fonts_no_swap": google_fonts and not gfonts_display_swap,
         "render_blocking_count": render_blocking,
-        "large_font_files": large_font_files,  # list[{"url": str, "size_kb": float}]
-        # Base score breakdown — lets performance.py explain silent deductions in the UI
+        "large_font_files": large_font_files,
+        # Base score breakdown — lets performance.py explain deductions in the UI
         "base_score_breakdown": base_breakdown,
     }
 

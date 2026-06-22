@@ -88,7 +88,25 @@ export const scanApi = {
 // ── History ───────────────────────────────────────────────────────────────────
 
 export const historyApi = {
-  list: (limit = 20, offset = 0) =>
-    request<import("./types").ScanSummary[]>("GET", `/history?limit=${limit}&offset=${offset}`),
+  list: ({
+    limit = 20,
+    offset = 0,
+    url,
+    min_score,
+    max_score,
+  }: import("./types").HistoryListParams = {}) => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (url?.trim()) params.set("url", url.trim());
+    if (min_score != null && !Number.isNaN(min_score)) {
+      params.set("min_score", String(min_score));
+    }
+    if (max_score != null && !Number.isNaN(max_score)) {
+      params.set("max_score", String(max_score));
+    }
+    return request<import("./types").PaginatedScans>("GET", `/history?${params}`);
+  },
   get: (id: number) => request<import("./types").ScanDetail>("GET", `/history/${id}`),
 };
