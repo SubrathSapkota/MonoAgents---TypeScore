@@ -245,9 +245,9 @@ def _aggregate_fingerprints(pages: list[dict]) -> dict:
 
 
 def _family_count_score(site: dict) -> tuple[float, dict]:
-    """Fewer distinct primary families = tighter brand. 1-3 is healthy."""
+    """Fewer distinct primary families = tighter brand. 1-7 is healthy."""
     n = len(site["primaryFamilies"])
-    score = 1.0 if n <= 3 else _clamp(1.0 - (n - 3) * 0.18)
+    score = 1.0 if n <= 7 else _clamp(1.0 - (n - 7) * 0.12)
     return score, {"distinctFamilies": n, "families": sorted(site["primaryFamilies"].keys())[:8]}
 
 
@@ -317,8 +317,8 @@ def _score_typography_structure_fingerprint(site: dict) -> tuple[float, list[str
     if fc_score < 0.8:
         violations.append(
             f"Font family sprawl: {fc_detail['distinctFamilies']} distinct families detected "
-            f"(target ≤ 3). Families: {fc_detail['families'][:6]}. "
-            "A focused brand uses 1-3 typefaces."
+            f"(target ≤ 7). Families: {fc_detail['families'][:6]}. "
+            "A focused brand uses 1-3 typefaces with script-specific additions as needed."
         )
 
     rs_score, rs_detail = metrics["roleSeparation"]
@@ -350,17 +350,17 @@ def _score_typography_structure_fingerprint(site: dict) -> tuple[float, list[str
 def _score_typography_structure_http(page_font_data: list[dict], all_brand_fonts: set[str]) -> tuple[float, list[str]]:
     """Typography Structure from HTTP data — simplified family count check."""
     n = len(all_brand_fonts)
-    score = 1.0 if n <= 3 else _clamp(1.0 - (n - 3) * 0.18)
+    score = 1.0 if n <= 7 else _clamp(1.0 - (n - 7) * 0.12)
     violations: list[str] = []
 
-    if n > 5:
+    if n > 10:
         violations.append(
-            f"Font family sprawl: {n} distinct brand families detected (target ≤ 3). "
-            "A focused brand uses 1-3 typefaces."
+            f"Font family sprawl: {n} distinct brand families detected (target ≤ 7). "
+            "A focused brand uses 1-3 core typefaces with script-specific additions as needed."
         )
-    elif n > 3:
+    elif n > 7:
         violations.append(
-            f"Moderate font variety: {n} brand families detected (target ≤ 3)."
+            f"Moderate font variety: {n} brand families detected (target ≤ 7)."
         )
 
     return score, violations
