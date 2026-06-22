@@ -10,3 +10,4 @@ aiomysql
 python-jose[cryptography]
 python-multipart
 bcrypt
+playwright
