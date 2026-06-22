@@ -2754,6 +2754,84 @@ input, select, textarea { font-family: var(--font-sans); }
   color: var(--color-text-secondary);
 }
 
+.history-filters {
+  margin-bottom: 20px;
+}
+
+.history-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.history-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-filter-field--url {
+  flex: 1;
+  min-width: 200px;
+}
+
+.history-filter-field--score {
+  width: 120px;
+}
+
+.history-filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-secondary);
+}
+
+.history-filter-input {
+  padding: 9px 12px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.history-filter-input:focus {
+  border-color: var(--color-text-muted);
+}
+
+.history-filter-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.history-filter-clear {
+  padding: 9px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.history-filter-clear:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.history-filter-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-bad);
+}
+
 .history-pagination {
   display: flex;
   justify-content: center;

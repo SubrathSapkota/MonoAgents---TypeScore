@@ -149,3 +149,11 @@ export interface PaginatedScans {
   limit: number;
   offset: number;
 }
+
+export interface HistoryListParams {
+  limit?: number;
+  offset?: number;
+  url?: string;
+  min_score?: number;
+  max_score?: number;
+}
