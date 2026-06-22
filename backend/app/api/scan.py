@@ -20,6 +20,20 @@ router = APIRouter()
 
 class AnalyzeRequest(BaseModel):
     url: str
+    use_browser: bool = False
+
+
+async def _extract_fingerprints(url: str) -> list[dict] | None:
+    """Attempt browser-based extraction. Returns None if unavailable."""
+    try:
+        from app.extractor import extract_site
+        return await extract_site(url, max_pages=5, max_depth=1)
+    except ImportError:
+        print("[analyze] Playwright not installed — skipping browser extraction")
+        return None
+    except Exception as e:
+        print(f"[analyze] Browser extraction failed: {e}")
+        return None
 
 
 @router.post("/scan", response_model=ScanResponse)
@@ -47,6 +61,12 @@ async def analyze(
         scan_result = await scan_website(req.url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Browser-based font extraction (enriches brand consistency scoring)
+    if req.use_browser:
+        fingerprints = await _extract_fingerprints(req.url)
+        if fingerprints:
+            scan_result["fingerprints"] = fingerprints
 
     lighthouse = None
     try:

@@ -50,7 +50,7 @@ def compute_scores(
       }
     }
     """
-    b_score, b_viol = brand_consistency_score(scan)
+    b_score, b_viol = brand_consistency_score(scan, approved_fonts=user_fonts)
     l_score, l_viol = license_compliance_score(scan, user_fonts)
     p_score, p_viol = performance_score(lighthouse)
     a_score, a_viol = accessibility_score(a11y)

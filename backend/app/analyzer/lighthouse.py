@@ -230,7 +230,29 @@ async def analyze_url(url: str) -> dict:
 
     # Check unused/excessive font variants
     font_face_count = len(re.findall(r"@font-face", all_css, re.IGNORECASE))
-    if font_face_count > 8:
+
+    # Compute distinct font variants (family + weight + style) to detect subsetting.
+    # When unicode-range is used, many @font-face blocks map to fewer logical variants.
+    font_face_blocks = re.findall(
+        r"@font-face\s*\{([^}]+)\}", all_css, re.IGNORECASE | re.DOTALL
+    )
+    seen_variants: set[tuple[str, str, str]] = set()
+    uses_unicode_range = False
+    for block in font_face_blocks:
+        if re.search(r"unicode-range", block, re.IGNORECASE):
+            uses_unicode_range = True
+        family_m = re.search(r"font-family\s*:\s*([^;]+)", block, re.IGNORECASE)
+        weight_m = re.search(r"font-weight\s*:\s*([^;]+)", block, re.IGNORECASE)
+        style_m = re.search(r"font-style\s*:\s*([^;]+)", block, re.IGNORECASE)
+        family = (family_m.group(1).strip().strip("'\"").lower() if family_m else "")
+        weight = (weight_m.group(1).strip().lower() if weight_m else "400")
+        style = (style_m.group(1).strip().lower() if style_m else "normal")
+        if family:
+            seen_variants.add((family, weight, style))
+    font_variant_count = len(seen_variants)
+    font_family_count = len({family for family, _, _ in seen_variants})
+
+    if font_face_count > 8 and not uses_unicode_range:
         font_warnings.append(f"{font_face_count} @font-face declarations — consider subsetting or reducing variants")
 
     # Check font file sizes via HEAD requests (brief: flag files > 100KB)
@@ -272,6 +294,10 @@ async def analyze_url(url: str) -> dict:
         # Raw signals consumed by scoring/performance.py for explicit deductions
         "font_display_ok": font_display_ok,
         "has_font_face": has_font_face,
+        "font_face_count": font_face_count,
+        "font_variant_count": font_variant_count,
+        "font_family_count": font_family_count,
+        "uses_unicode_range": uses_unicode_range,
         "google_fonts_no_swap": google_fonts and not gfonts_display_swap,
         "render_blocking_count": render_blocking,
         "large_font_files": large_font_files,  # list[{"url": str, "size_kb": float}]
